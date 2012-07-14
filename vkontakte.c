@@ -12,14 +12,32 @@
 
 static DB_functions_t *deadbeef;
 static ddb_gtkui_t *gtkui_plugin;
+
 static intptr_t http_tid;	// thread for communication
 
 static GtkWidget *add_tracks_dlg;
 
+typedef struct {
+	const gchar *query;
+} SEARCH_QUERY;
+
+void 
+http_thread_func(void *ctx) {
+	
+}
+
 void 
 on_search(GtkWidget *widget, GtkWidget *entry) {
-	deadbeef->thread_start();
-	trace(gtk_entry_get_text(GTK_ENTRY(widget)));
+	if (http_tid) {
+		deadbeef->thread_detach(http_tid);
+		http_tid = 0;
+	}
+	
+	const gchar *query_text = gtk_entry_get_text(GTK_ENTRY(widget));
+	trace("Searching for %s\n", query_text);
+	SEARCH_QUERY query = { .query = query_text };
+	
+	http_tid = deadbeef->thread_start(http_thread_func, &query);
 }
 
 static GtkWidget *
