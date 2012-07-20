@@ -1,24 +1,15 @@
 #include <stdlib.h>
+#include <assert.h>
 #include <string.h>
 #include <gtk/gtk.h>
 #include <deadbeef.h>
 #include <plugins/gtkui/gtkui_api.h>
 #include <curl/curl.h>
+#include <glib-object.h>
+#include <json-glib/json-glib.h>
 
-#define trace(...) { fprintf(stderr, __VA_ARGS__); }
-
-#ifdef ENABLE_NLS
-#include <libintl.h>
-#define _(X) gettext(X)
-#else
-#define _(X) (X)
-#endif
-
-#define VK_AUTH_URL "http://oauth.vkontakte.ru/authorize?client_id=3035566\
-					&scope=audio,friends\
-					&redirect_uri=http://scorpspot.blogspot.com\
-					&response_type=token"
-#define VK_API_URL "https://api.vk.com/method/"
+#include "vkontakte.h"
+#include "util.h"
 
 static DB_functions_t *deadbeef;
 static ddb_gtkui_t *gtkui_plugin;
@@ -27,22 +18,100 @@ static intptr_t http_tid;	// thread for communication
 
 static GtkWidget *add_tracks_dlg;
 
-static char *vk_access_token = "3e0d03b76e4e32e63e11cff96e3e62d1d133e4c3e4c8075989745e493ce36b8";
+static char *vk_access_token = "019d159c51d9c4c6011ed942e601f2c7fa001dc01dc965e4c016eb73302b192";
 
-typedef struct {
-	const gchar *query;
-} SEARCH_QUERY;
+void
+parse_audio_track(JsonArray *array, guint index_, JsonNode *element_node, gpointer user_data) {
+	assert(JSON_NODE_HOLDS_OBJECT(element_node));
+	VK_AUDIO_INFO *vk_tracks;
+	JsonObject *track;
+	
+	vk_tracks = (VK_AUDIO_INFO *) user_data;	// user_data is an array
+	vk_tracks += index_;
+	
+	track = json_node_get_object(element_node);
+	
+	vk_tracks->aid = json_object_get_int_member(track, "aid");
+	vk_tracks->artist = json_object_get_string_member(track, "artist");
+	vk_tracks->duration = json_object_get_int_member(track, "duration");
+	vk_tracks->owner_id = json_object_get_int_member(track, "owner_id");
+	vk_tracks->title = json_object_get_string_member(track, "title");
+	vk_tracks->url = json_object_get_string_member(track, "url");
+}
+
+void
+parse_audio_resp(GInputStream *input) {
+	GError *error = NULL;
+	JsonParser *parser;
+	JsonNode *root;
+	JsonArray *tracks;
+	JsonObject *tmp_obj;
+	JsonNode *tmp_node;
+
+	parser = json_parser_new();
+	json_parser_load_from_stream(parser, input, NULL, &error);
+	if (error) {
+		trace("Unable to parse audio response: %s\n", error->message);
+		g_error_free(error);
+		g_object_unref(parser);
+		return;
+	}
+	
+	root = json_parser_get_root(parser);
+	
+	assert(JSON_NODE_HOLDS_OBJECT(root));
+	tmp_obj = json_node_get_object(root);
+	tmp_node = json_object_get_member(tmp_obj, "responses");
+	assert(JSON_NODE_HOLDS_ARRAY(tmp_node));
+	
+	tracks = json_node_get_array(tmp_node);
+	int n_tracks = json_array_get_length(tracks);
+	VK_AUDIO_INFO vk_tracks[n_tracks];// = VK_AUDIO_INFO[n_tracks];//calloc(n_tracks, sizeof(VK_AUDIO_INFO));
+	json_array_foreach_element(tracks, parse_audio_track, &vk_tracks);
+	
+	for (int i = 0; i < n_tracks; i++) {
+		VK_AUDIO_INFO track = vk_tracks[i];
+		trace("%s - %s [%d]\n", track.artist, track.title, track.duration);
+	}
+	
+	g_object_unref(parser);
+	
+	for (int i = 0; i < n_tracks; i++) {
+		VK_AUDIO_INFO track = vk_tracks[i];
+		trace("%s - %s [%d]\n", track.artist, track.title, track.duration);
+	}	
+}
 
 size_t 
 http_write_data( char *ptr, size_t size, size_t nmemb, void *userdata) {
+	GMemoryInputStream *resp_stream = (GMemoryInputStream *) userdata;
+	
 	trace(ptr);
+	//trace("size * nmemb %d\nstrlen %d\ng_utf8_strlen %d", size * nmemb, strlen(ptr), g_utf8_strlen(ptr, -1));
+	//fwrite(ptr, 1, nmemb * size, stderr);
+//	trace("\n");
+	char *formatted = str_replace(ptr, ",", ",\n");
+	if (formatted) {
+		g_memory_input_stream_add_data(resp_stream, 
+				ptr, 
+				size * nmemb, 
+				NULL);
+		free(formatted);
+	} else {
+		trace("Null data in http_write_date");
+	}
+	
 	return size * nmemb;
 }
 
 void 
 http_thread_func(void *ctx) {
 	trace("Http thread started\n");
-	CURL *curl = curl_easy_init();
+	CURL *curl;
+	GInputStream *resp_stream;
+	
+	curl = curl_easy_init();
+	resp_stream = g_memory_input_stream_new();
 	
 	char *curl_err_buf = malloc(CURL_ERROR_SIZE);
 	char *method_url = malloc(strlen(VK_API_URL) + strlen(vk_access_token) + 24);
@@ -55,6 +124,7 @@ http_thread_func(void *ctx) {
 	curl_easy_setopt (curl, CURLOPT_MAXREDIRS, 10);
 	// setup handlers
 	curl_easy_setopt (curl, CURLOPT_WRITEFUNCTION, http_write_data);
+	curl_easy_setopt (curl, CURLOPT_WRITEDATA, resp_stream);
 	curl_easy_setopt (curl, CURLOPT_ERRORBUFFER, curl_err_buf);
 	
 	int status = curl_easy_perform(curl);
@@ -63,8 +133,12 @@ http_thread_func(void *ctx) {
 		trace(curl_err_buf);
 	}
 	
-	curl_easy_cleanup(curl);
+	g_input_stream_read()
+	parse_audio_resp(resp_stream);
+	
+	g_object_unref(resp_stream);
 	free(method_url);
+	curl_easy_cleanup(curl);
 	trace("Http thread exit\n");
 }
 
@@ -171,3 +245,76 @@ vkontakte_load (DB_functions_t *api) {
     deadbeef = api;
     return &plugin.plugin;
 }
+
+/*
+ {
+   "response":[      
+      {
+         "aid":26372908,
+         "owner_id":4293576,
+         "artist":"Фліт",
+         "title":"Їжачок",
+         "duration":230,
+         "url":"http:\/\/cs1334.vkontakte.ru\/u4293576\/audio\/528b3745fd2b.mp3"
+      },
+      {
+         "aid":22102671,
+         "owner_id":4293576,
+         "artist":"Dire Straits",
+         "title":"Sultans of Swing",
+         "duration":346,
+         "url":"http:\/\/cs1335.vkontakte.ru\/u4293576\/audio\/36893e57f6f6.mp3"
+      },
+      {
+         "aid":22098274,
+         "owner_id":4293576,
+         "artist":"Dire Straits",
+         "title":"Money for Nothing",
+         "duration":246,
+         "url":"http:\/\/cs1335.vkontakte.ru\/u4293576\/audio\/25224557805f.mp3"
+      },
+      {
+         "aid":42601125,
+         "owner_id":4293576,
+         "artist":"Frank Klepacki",
+         "title":"Big Foot",
+         "duration":381,
+         "url":"http:\/\/cs1631.vkontakte.ru\/u4293576\/audio\/c8733785bd12.mp3"
+      },
+      {
+         "aid":43432450,
+         "owner_id":4293576,
+         "artist":"ScORcH",
+         "title":"ScORcH-tisfaction",
+         "duration":227,
+         "url":"http:\/\/cs1628.vkontakte.ru\/u4293576\/audio\/10f8a514936d.mp3"
+      },
+      {
+         "aid":47040293,
+         "owner_id":4293576,
+         "artist":"Dropkick Murphys",
+         "title":"Loyal To No-One",
+         "duration":145,
+         "url":"http:\/\/cs1710.vkontakte.ru\/u4293576\/audio\/0be1eae8bab4.mp3",
+         "lyrics_id":"1415403"
+      },
+      {
+         "aid":40826173,
+         "owner_id":4293576,
+         "artist":"Dropkick Murphys",
+         "title":"The State Of Massachusetts",
+         "duration":232,
+         "url":"http:\/\/cs1544.vkontakte.ru\/u4293576\/audio\/7547b34f6572.mp3",
+         "lyrics_id":"1415411"
+      },
+      {
+         "aid":18013801,
+         "owner_id":4293576,
+         "artist":"In Flames",
+         "title":"Gyroscope",
+         "duration":208,
+         "url":"http:\/\/cs1269.vkontakte.ru\/u4293576\/audio\/305fdb750f9a.mp3"
+      }
+   ]
+}
+  */
