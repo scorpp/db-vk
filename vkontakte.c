@@ -9,7 +9,7 @@
 #include <json-glib/json-glib.h>
 
 #include "vkontakte.h"
-#include "util.h"
+//#include "util.h"
 
 static DB_functions_t *deadbeef;
 static ddb_gtkui_t *gtkui_plugin;
@@ -18,7 +18,7 @@ static intptr_t http_tid;	// thread for communication
 
 static GtkWidget *add_tracks_dlg;
 
-static char *vk_access_token = "019d159c51d9c4c6011ed942e601f2c7fa001dc01dc965e4c016eb73302b192";
+static char *vk_access_token = "4a9619821add77db4a8ad5cc074af9cbe444ad74ad79a40ce33c9c1d8e58920";
 
 void
 parse_audio_track(JsonArray *array, guint index_, JsonNode *element_node, gpointer user_data) {
@@ -39,8 +39,40 @@ parse_audio_track(JsonArray *array, guint index_, JsonNode *element_node, gpoint
 	vk_tracks->url = json_object_get_string_member(track, "url");
 }
 
+void 
+parser_on_object_member(JsonParser *parser, JsonObject *object,
+					gchar      *member_name,
+					gpointer    user_data) {
+	trace("%s\n", member_name);
+}
+
 void
-parse_audio_resp(GInputStream *input) {
+parser_on_object_start(JsonParser *parser, gpointer user_data) {
+	trace("=>object start\n");
+}
+
+void
+parser_on_object_end(JsonParser *parser, JsonObject *object, gpointer user_data) {
+	trace("<=object end\n");
+}
+
+void
+parser_on_array_start(JsonParser *parser, gpointer user_data) {
+	trace("=>array start\n");
+}
+
+void
+parser_on_array_end(JsonParser *parser, JsonObject *object, gpointer user_data) {
+	trace("<=array end\n");
+}
+
+void
+parser_on_error(JsonParser *parser, gpointer error, gpointer user_data) {
+	trace("Error: %s\n", ((GError *) error)->message);
+}
+
+void
+parse_audio_resp(GString *resp_str) {
 	GError *error = NULL;
 	JsonParser *parser;
 	JsonNode *root;
@@ -49,8 +81,14 @@ parse_audio_resp(GInputStream *input) {
 	JsonNode *tmp_node;
 
 	parser = json_parser_new();
-	json_parser_load_from_stream(parser, input, NULL, &error);
-	if (error) {
+	g_signal_connect(parser, "object-member", G_CALLBACK(parser_on_object_member), NULL);
+	g_signal_connect(parser, "object-start", G_CALLBACK(parser_on_object_start), NULL);
+	g_signal_connect(parser, "object-end", G_CALLBACK(parser_on_object_end), NULL);
+	g_signal_connect(parser, "array-start", G_CALLBACK(parser_on_array_start), NULL);
+	g_signal_connect(parser, "array-end", G_CALLBACK(parser_on_array_end), NULL);
+	g_signal_connect(parser, "error", G_CALLBACK(parser_on_error), NULL);
+	
+	if (!json_parser_load_from_data(json_parser_new(), resp_str->str, -1, &error)) {
 		trace("Unable to parse audio response: %s\n", error->message);
 		g_error_free(error);
 		g_object_unref(parser);
@@ -84,34 +122,29 @@ parse_audio_resp(GInputStream *input) {
 
 size_t 
 http_write_data( char *ptr, size_t size, size_t nmemb, void *userdata) {
-	GMemoryInputStream *resp_stream = (GMemoryInputStream *) userdata;
+	GString *resp_str = (GString *) userdata;
+	g_string_append_len(resp_str, ptr, size * nmemb);
 	
-	trace(ptr);
-	//trace("size * nmemb %d\nstrlen %d\ng_utf8_strlen %d", size * nmemb, strlen(ptr), g_utf8_strlen(ptr, -1));
-	//fwrite(ptr, 1, nmemb * size, stderr);
-//	trace("\n");
-	char *formatted = str_replace(ptr, ",", ",\n");
-	if (formatted) {
-		g_memory_input_stream_add_data(resp_stream, 
-				ptr, 
-				size * nmemb, 
-				NULL);
-		free(formatted);
-	} else {
-		trace("Null data in http_write_date");
-	}
-	
+	return size * nmemb;
+}
+
+size_t
+http_write_header( void *ptr, size_t size, size_t nmemb, void *userdata) {
+	fwrite(ptr, 1, size * nmemb, stderr);
 	return size * nmemb;
 }
 
 void 
 http_thread_func(void *ctx) {
-	trace("Http thread started\n");
+	trace("===Http thread started\n");
 	CURL *curl;
 	GInputStream *resp_stream;
+	GString *resp_str;
+	GError *error = NULL;
 	
 	curl = curl_easy_init();
 	resp_stream = g_memory_input_stream_new();
+	resp_str = g_string_new("");
 	
 	char *curl_err_buf = malloc(CURL_ERROR_SIZE);
 	char *method_url = malloc(strlen(VK_API_URL) + strlen(vk_access_token) + 24);
@@ -124,17 +157,21 @@ http_thread_func(void *ctx) {
 	curl_easy_setopt (curl, CURLOPT_MAXREDIRS, 10);
 	// setup handlers
 	curl_easy_setopt (curl, CURLOPT_WRITEFUNCTION, http_write_data);
-	curl_easy_setopt (curl, CURLOPT_WRITEDATA, resp_stream);
+	curl_easy_setopt (curl, CURLOPT_WRITEDATA, /*resp_stream*/resp_str);
+	curl_easy_setopt (curl, CURLOPT_HEADERFUNCTION, http_write_header);
+	curl_easy_setopt (curl, CURLOPT_HEADERDATA, NULL);
 	curl_easy_setopt (curl, CURLOPT_ERRORBUFFER, curl_err_buf);
 	
 	int status = curl_easy_perform(curl);
-	trace("curl_easy_perform(..) returned %d\n", status);
+	trace("\ncurl_easy_perform(..) returned %d\n", status);
 	if (status != 0) {
 		trace(curl_err_buf);
 	}
 	
-	g_input_stream_read()
-	parse_audio_resp(resp_stream);
+//	fwrite(resp_str->str, resp_str->allocated_len, 1, stderr);
+	trace("\n");
+	trace("=== Parsing response\n");
+	parse_audio_resp(resp_str);
 	
 	g_object_unref(resp_stream);
 	free(method_url);
@@ -151,7 +188,7 @@ on_search(GtkWidget *widget, GtkWidget *entry) {
 	}
 	
 	const gchar *query_text = gtk_entry_get_text(GTK_ENTRY(widget));
-	trace("Searching for %s\n", query_text);
+	trace("== Searching for %s\n", query_text);
 	SEARCH_QUERY query = { .query = query_text };
 	
 	http_tid = deadbeef->thread_start(http_thread_func, &query);
