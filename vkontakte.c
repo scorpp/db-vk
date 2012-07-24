@@ -15,65 +15,62 @@ static DB_functions_t *deadbeef;
 static ddb_gtkui_t *gtkui_plugin;
 
 static intptr_t http_tid;	// thread for communication
+static SEARCH_QUERY *query;
 
 static GtkWidget *add_tracks_dlg;
 
-static char *vk_access_token = "4a9619821add77db4a8ad5cc074af9cbe444ad74ad79a40ce33c9c1d8e58920";
+static char *vk_access_token = "9f5f8a80cf1106e89f4346cefb9f3058e699f1e9f1e094271e9a4c72c961b6c";
+
+/**
+ * List view columns.
+ */
+enum
+{
+	ARTIST_COLUMN,
+	TITLE_COLUMN,
+	DURATION_COLUMN,
+	URL_COLUMN,
+	N_COLUMNS
+};
+
+// TODO move to util.c
+gchar *
+strdup(const gchar *str) {
+	int len = strlen(str);
+	gchar *new_str = malloc(len);
+	return strcpy(new_str, str);
+}
 
 void
 parse_audio_track(JsonArray *array, guint index_, JsonNode *element_node, gpointer user_data) {
 	assert(JSON_NODE_HOLDS_OBJECT(element_node));
-	VK_AUDIO_INFO *vk_tracks;
+	GtkTreeIter *iter;
 	JsonObject *track;
 	
-	vk_tracks = (VK_AUDIO_INFO *) user_data;	// user_data is an array
-	vk_tracks += index_;
-	
+	iter = (GtkTreeIter *) user_data;
 	track = json_node_get_object(element_node);
 	
-	vk_tracks->aid = json_object_get_int_member(track, "aid");
-	vk_tracks->artist = json_object_get_string_member(track, "artist");
-	vk_tracks->duration = json_object_get_int_member(track, "duration");
-	vk_tracks->owner_id = json_object_get_int_member(track, "owner_id");
-	vk_tracks->title = json_object_get_string_member(track, "title");
-	vk_tracks->url = json_object_get_string_member(track, "url");
-}
-
-void 
-parser_on_object_member(JsonParser *parser, JsonObject *object,
-					gchar      *member_name,
-					gpointer    user_data) {
-	trace("%s\n", member_name);
-}
-
-void
-parser_on_object_start(JsonParser *parser, gpointer user_data) {
-	trace("=>object start\n");
-}
-
-void
-parser_on_object_end(JsonParser *parser, JsonObject *object, gpointer user_data) {
-	trace("<=object end\n");
-}
-
-void
-parser_on_array_start(JsonParser *parser, gpointer user_data) {
-	trace("=>array start\n");
-}
-
-void
-parser_on_array_end(JsonParser *parser, JsonObject *object, gpointer user_data) {
-	trace("<=array end\n");
-}
-
-void
-parser_on_error(JsonParser *parser, gpointer error, gpointer user_data) {
-	trace("Error: %s\n", ((GError *) error)->message);
+	// read data from json
+	int aid = json_object_get_int_member(track, "aid");
+	const char *artist = json_object_get_string_member(track, "artist");
+	int duration = json_object_get_int_member(track, "duration");
+	int owner_id = json_object_get_int_member(track, "owner_id");
+	const char *title = json_object_get_string_member(track, "title");
+	const char *url = json_object_get_string_member(track, "url");
+	
+	// write to list store
+	gtk_list_store_append(query->store, iter);
+	gtk_list_store_set(query->store, iter, 
+		ARTIST_COLUMN, artist,
+		TITLE_COLUMN, title,
+		DURATION_COLUMN, duration,
+		URL_COLUMN, url,
+		-1);
 }
 
 void
 parse_audio_resp(GString *resp_str) {
-	GError *error = NULL;
+	GError *error;
 	JsonParser *parser;
 	JsonNode *root;
 	JsonArray *tracks;
@@ -81,14 +78,9 @@ parse_audio_resp(GString *resp_str) {
 	JsonNode *tmp_node;
 
 	parser = json_parser_new();
-	g_signal_connect(parser, "object-member", G_CALLBACK(parser_on_object_member), NULL);
-	g_signal_connect(parser, "object-start", G_CALLBACK(parser_on_object_start), NULL);
-	g_signal_connect(parser, "object-end", G_CALLBACK(parser_on_object_end), NULL);
-	g_signal_connect(parser, "array-start", G_CALLBACK(parser_on_array_start), NULL);
-	g_signal_connect(parser, "array-end", G_CALLBACK(parser_on_array_end), NULL);
-	g_signal_connect(parser, "error", G_CALLBACK(parser_on_error), NULL);
 	
-	if (!json_parser_load_from_data(json_parser_new(), resp_str->str, -1, &error)) {
+	error = NULL;	
+	if (!json_parser_load_from_data(parser, resp_str->str, -1, &error)) {
 		trace("Unable to parse audio response: %s\n", error->message);
 		g_error_free(error);
 		g_object_unref(parser);
@@ -99,51 +91,39 @@ parse_audio_resp(GString *resp_str) {
 	
 	assert(JSON_NODE_HOLDS_OBJECT(root));
 	tmp_obj = json_node_get_object(root);
-	tmp_node = json_object_get_member(tmp_obj, "responses");
+	tmp_node = json_object_get_member(tmp_obj, "response");
 	assert(JSON_NODE_HOLDS_ARRAY(tmp_node));
 	
 	tracks = json_node_get_array(tmp_node);
 	int n_tracks = json_array_get_length(tracks);
-	VK_AUDIO_INFO vk_tracks[n_tracks];// = VK_AUDIO_INFO[n_tracks];//calloc(n_tracks, sizeof(VK_AUDIO_INFO));
-	json_array_foreach_element(tracks, parse_audio_track, &vk_tracks);
+
+	// Fill the store
+	GtkTreeIter iter;
+	gtk_list_store_clear(query->store);
 	
-	for (int i = 0; i < n_tracks; i++) {
-		VK_AUDIO_INFO track = vk_tracks[i];
-		trace("%s - %s [%d]\n", track.artist, track.title, track.duration);
-	}
+	json_array_foreach_element(tracks, parse_audio_track, &iter);
 	
 	g_object_unref(parser);
-	
-	for (int i = 0; i < n_tracks; i++) {
-		VK_AUDIO_INFO track = vk_tracks[i];
-		trace("%s - %s [%d]\n", track.artist, track.title, track.duration);
-	}	
 }
 
 size_t 
 http_write_data( char *ptr, size_t size, size_t nmemb, void *userdata) {
 	GString *resp_str = (GString *) userdata;
-	g_string_append_len(resp_str, ptr, size * nmemb);
-	
-	return size * nmemb;
-}
-
-size_t
-http_write_header( void *ptr, size_t size, size_t nmemb, void *userdata) {
-	fwrite(ptr, 1, size * nmemb, stderr);
+	g_string_append_len(resp_str, ptr, size * nmemb);	
 	return size * nmemb;
 }
 
 void 
 http_thread_func(void *ctx) {
 	trace("===Http thread started\n");
+	
+	SEARCH_QUERY *query = (SEARCH_QUERY *) ctx;
+	
 	CURL *curl;
-	GInputStream *resp_stream;
 	GString *resp_str;
 	GError *error = NULL;
 	
 	curl = curl_easy_init();
-	resp_stream = g_memory_input_stream_new();
 	resp_str = g_string_new("");
 	
 	char *curl_err_buf = malloc(CURL_ERROR_SIZE);
@@ -157,9 +137,7 @@ http_thread_func(void *ctx) {
 	curl_easy_setopt (curl, CURLOPT_MAXREDIRS, 10);
 	// setup handlers
 	curl_easy_setopt (curl, CURLOPT_WRITEFUNCTION, http_write_data);
-	curl_easy_setopt (curl, CURLOPT_WRITEDATA, /*resp_stream*/resp_str);
-	curl_easy_setopt (curl, CURLOPT_HEADERFUNCTION, http_write_header);
-	curl_easy_setopt (curl, CURLOPT_HEADERDATA, NULL);
+	curl_easy_setopt (curl, CURLOPT_WRITEDATA, resp_str);
 	curl_easy_setopt (curl, CURLOPT_ERRORBUFFER, curl_err_buf);
 	
 	int status = curl_easy_perform(curl);
@@ -173,53 +151,129 @@ http_thread_func(void *ctx) {
 	trace("=== Parsing response\n");
 	parse_audio_resp(resp_str);
 	
-	g_object_unref(resp_stream);
 	free(method_url);
 	curl_easy_cleanup(curl);
 	trace("Http thread exit\n");
 }
 
+void
+vk_add_track_from_tree_store_to_playlist(GtkTreeIter *iter, ddb_playlist_t *plt) {
+	gchar *artist;
+	gchar *title;
+	int duration;
+	gchar *url;
+	
+	gtk_tree_model_get(GTK_TREE_MODEL(query->store), iter, 
+			ARTIST_COLUMN, &artist,
+			TITLE_COLUMN, &title, 
+			DURATION_COLUMN, &duration,
+			URL_COLUMN, &url, 
+			-1);
+
+	DB_playItem_t *pt;
+	int pabort = 0;
+	
+	pt = deadbeef->plt_insert_file(plt, NULL, url, &pabort, NULL, NULL);
+	deadbeef->pl_add_meta(pt, "artist", artist);
+	deadbeef->pl_add_meta(pt, "title", title);
+	deadbeef->plt_set_item_duration(plt, pt, duration);
+	deadbeef->pl_item_ref(pt);
+	
+	free(artist);
+	free(title);
+	free(url);	
+}
+
+void
+on_search_results_row_activate(GtkTreeView *tree_view,
+                               GtkTreePath *path, 
+                               GtkTreeViewColumn *column,
+							   gpointer user_data) {
+	GtkTreeModel *model;
+	GtkTreeIter iter;
+	ddb_playlist_t *plt;
+	
+	model = gtk_tree_view_get_model(tree_view);
+	plt = deadbeef->plt_get_curr();
+	
+	if (gtk_tree_model_get_iter(model, &iter, path)) {
+		vk_add_track_from_tree_store_to_playlist(&iter, plt);
+	}
+	
+	deadbeef->plt_unref(plt);
+}
+
 void 
-on_search(GtkWidget *widget, GtkWidget *entry) {
+on_search(GtkWidget *widget, gpointer data) {
+	// TODO block widget until thread is started
 	if (http_tid) {
 		trace("Killing http thread");
 		deadbeef->thread_detach(http_tid);
+		free(query->query);
+		free(query);
+
 		http_tid = 0;
+		query = NULL;
 	}
 	
 	const gchar *query_text = gtk_entry_get_text(GTK_ENTRY(widget));
 	trace("== Searching for %s\n", query_text);
-	SEARCH_QUERY query = { .query = query_text };
+
+	query = malloc(sizeof(SEARCH_QUERY));
+	query->query = strdup(query_text);
+	query->store = GTK_LIST_STORE(data);
 	
-	http_tid = deadbeef->thread_start(http_thread_func, &query);
+	http_tid = deadbeef->thread_start(http_thread_func, query);
 }
 
 static GtkWidget *
 vk_create_add_tracks_dlg()
 {
-	GtkWidget *dlg = gtk_dialog_new ();
+	GtkWidget *dlg;
+	GtkWidget *dlg_vbox;
+	GtkWidget *search_text;
+	GtkWidget *search_results;
+	GtkListStore *list_store;
+	GtkCellRenderer *artist_cell;
+	GtkCellRenderer *title_cell;
+	
+	dlg = gtk_dialog_new ();
 	gtk_container_set_border_width (GTK_CONTAINER (dlg), 12);
 	gtk_window_set_title (GTK_WINDOW (dlg), /*_(*/"Search tracks"/*)*/);
 	gtk_window_set_type_hint (GTK_WINDOW (dlg), GDK_WINDOW_TYPE_HINT_DIALOG);
 	gtk_dialog_set_has_separator (GTK_DIALOG (dlg), FALSE);
 	
-	GtkWidget *dlg_vbox = gtk_dialog_get_content_area(GTK_DIALOG(dlg));
+	dlg_vbox = gtk_dialog_get_content_area(GTK_DIALOG(dlg));
+
+	list_store = gtk_list_store_new(N_COLUMNS, 
+		G_TYPE_STRING,	// ARTIST
+		G_TYPE_STRING,	// TITLE
+		G_TYPE_INT,		// DURATION seconds, not rendered
+		G_TYPE_STRING);	// URL, not rendered
 	
-	GtkWidget *search_text = gtk_entry_new();
+	search_text = gtk_entry_new();
 	gtk_box_pack_start(GTK_BOX(dlg_vbox), search_text, FALSE, FALSE, 0);
 	gtk_widget_show(search_text);	
-	g_signal_connect(search_text, "activate", G_CALLBACK(on_search), NULL);
+	g_signal_connect(search_text, "activate", G_CALLBACK(on_search), list_store);
 	
-	GtkListStore *store = gtk_list_store_new(1, G_TYPE_STRING);
-	GtkWidget *search_results = gtk_tree_view_new_with_model(store);
+	search_results = gtk_tree_view_new_with_model(GTK_TREE_MODEL(list_store));
+	artist_cell = gtk_cell_renderer_text_new();
+	title_cell = gtk_cell_renderer_text_new();
+	gtk_tree_view_insert_column_with_attributes(GTK_TREE_VIEW(search_results),
+			-1, "Artist", artist_cell, "text", ARTIST_COLUMN, NULL);
+	gtk_tree_view_insert_column_with_attributes(GTK_TREE_VIEW(search_results), 
+			-1, "Title", title_cell, "text", TITLE_COLUMN, NULL);
+	g_signal_connect(search_results, "row-activated", 
+			G_CALLBACK(on_search_results_row_activate), NULL);
+	
 	gtk_box_pack_start(GTK_BOX(dlg_vbox), search_results, TRUE, TRUE, 12);
-	gtk_widget_show(search_results);	
+	gtk_widget_show_all(dlg);
+	
 	return dlg;
 }
 
 static gboolean
-vk_action_gtk (void *data)
-{
+vk_action_gtk (void *data) {
     add_tracks_dlg = vk_create_add_tracks_dlg();
     gtk_widget_set_size_request (add_tracks_dlg, 400, 400);
     gtk_window_set_transient_for(GTK_WINDOW(add_tracks_dlg),
@@ -282,76 +336,3 @@ vkontakte_load (DB_functions_t *api) {
     deadbeef = api;
     return &plugin.plugin;
 }
-
-/*
- {
-   "response":[      
-      {
-         "aid":26372908,
-         "owner_id":4293576,
-         "artist":"Фліт",
-         "title":"Їжачок",
-         "duration":230,
-         "url":"http:\/\/cs1334.vkontakte.ru\/u4293576\/audio\/528b3745fd2b.mp3"
-      },
-      {
-         "aid":22102671,
-         "owner_id":4293576,
-         "artist":"Dire Straits",
-         "title":"Sultans of Swing",
-         "duration":346,
-         "url":"http:\/\/cs1335.vkontakte.ru\/u4293576\/audio\/36893e57f6f6.mp3"
-      },
-      {
-         "aid":22098274,
-         "owner_id":4293576,
-         "artist":"Dire Straits",
-         "title":"Money for Nothing",
-         "duration":246,
-         "url":"http:\/\/cs1335.vkontakte.ru\/u4293576\/audio\/25224557805f.mp3"
-      },
-      {
-         "aid":42601125,
-         "owner_id":4293576,
-         "artist":"Frank Klepacki",
-         "title":"Big Foot",
-         "duration":381,
-         "url":"http:\/\/cs1631.vkontakte.ru\/u4293576\/audio\/c8733785bd12.mp3"
-      },
-      {
-         "aid":43432450,
-         "owner_id":4293576,
-         "artist":"ScORcH",
-         "title":"ScORcH-tisfaction",
-         "duration":227,
-         "url":"http:\/\/cs1628.vkontakte.ru\/u4293576\/audio\/10f8a514936d.mp3"
-      },
-      {
-         "aid":47040293,
-         "owner_id":4293576,
-         "artist":"Dropkick Murphys",
-         "title":"Loyal To No-One",
-         "duration":145,
-         "url":"http:\/\/cs1710.vkontakte.ru\/u4293576\/audio\/0be1eae8bab4.mp3",
-         "lyrics_id":"1415403"
-      },
-      {
-         "aid":40826173,
-         "owner_id":4293576,
-         "artist":"Dropkick Murphys",
-         "title":"The State Of Massachusetts",
-         "duration":232,
-         "url":"http:\/\/cs1544.vkontakte.ru\/u4293576\/audio\/7547b34f6572.mp3",
-         "lyrics_id":"1415411"
-      },
-      {
-         "aid":18013801,
-         "owner_id":4293576,
-         "artist":"In Flames",
-         "title":"Gyroscope",
-         "duration":208,
-         "url":"http:\/\/cs1269.vkontakte.ru\/u4293576\/audio\/305fdb750f9a.mp3"
-      }
-   ]
-}
-  */

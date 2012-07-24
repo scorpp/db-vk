@@ -4,6 +4,7 @@
 #include <glib/gprintf.h>
 
 #define trace(...) { g_fprintf(stderr, __VA_ARGS__); }
+//#define strdup(str) ( strcpy(malloc(strlen(str)), str) )
 
 #ifdef ENABLE_NLS
 #include <libintl.h>
@@ -19,7 +20,8 @@
 #define VK_API_URL "https://api.vk.com/method/"
 
 typedef struct {
-	const char *query;
+	char *query;
+	GtkListStore *store;
 } SEARCH_QUERY;
 
 typedef struct {
