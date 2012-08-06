@@ -13,10 +13,7 @@
 #define _(X) (X)
 #endif
 
-#define VK_AUTH_URL "http://oauth.vkontakte.ru/authorize?client_id=3035566\
-					&scope=audio,friends\
-					&redirect_uri=http://scorpspot.blogspot.com\
-					&response_type=token"
+#define VK_AUTH_URL "http://oauth.vkontakte.ru/authorize?client_id=3035566&scope=audio,friends&redirect_uri=http://scorpspot.blogspot.com&response_type=token"
 #define VK_API_URL "https://api.vk.com/method/"
 
 typedef struct {
