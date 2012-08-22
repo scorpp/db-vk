@@ -2,8 +2,8 @@
 #include <assert.h>
 #include <string.h>
 #include <gtk/gtk.h>
-#include <deadbeef.h>
-#include <plugins/gtkui/gtkui_api.h>
+#include <deadbeef/deadbeef.h>
+#include <deadbeef/gtkui_api.h>
 #include <curl/curl.h>
 #include <glib-object.h>
 #include <json-glib/json-glib.h>
@@ -239,9 +239,8 @@ vk_create_add_tracks_dlg()
 	
 	dlg = gtk_dialog_new ();
 	gtk_container_set_border_width (GTK_CONTAINER (dlg), 12);
-	gtk_window_set_title (GTK_WINDOW (dlg), /*_(*/"Search tracks"/*)*/);
+	gtk_window_set_title (GTK_WINDOW (dlg), "Search tracks");
 	gtk_window_set_type_hint (GTK_WINDOW (dlg), GDK_WINDOW_TYPE_HINT_DIALOG);
-	gtk_dialog_set_has_separator (GTK_DIALOG (dlg), FALSE);
 	
 	dlg_vbox = gtk_dialog_get_content_area(GTK_DIALOG(dlg));
 
