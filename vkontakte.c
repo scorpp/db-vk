@@ -19,13 +19,12 @@ static SEARCH_QUERY *query;
 
 static GtkWidget *add_tracks_dlg;
 
-static char *vk_access_token = "9f5f8a80cf1106e89f4346cefb9f3058e699f1e9f1e094271e9a4c72c961b6c";
+static char *vk_access_token = "6c5333363c33ab586cd0ffe84c6c3ce15066c126c12b0f43cca3353edb37ffe";
 
 /**
  * List view columns.
  */
-enum
-{
+enum {
 	ARTIST_COLUMN,
 	TITLE_COLUMN,
 	DURATION_COLUMN,
@@ -58,6 +57,9 @@ parse_audio_track(JsonArray *array, guint index_, JsonNode *element_node, gpoint
 	const char *title = json_object_get_string_member(track, "title");
 	const char *url = json_object_get_string_member(track, "url");
 	
+	trace("%d (%d) %s - %s %d:%d %s\n", aid, owner_id, artist, title,
+		duration / 60, duration % 60, url);
+		
 	// write to list store
 	gtk_list_store_append(query->store, iter);
 	gtk_list_store_set(query->store, iter, 
@@ -115,7 +117,7 @@ http_write_data( char *ptr, size_t size, size_t nmemb, void *userdata) {
 
 void 
 http_thread_func(void *ctx) {
-	trace("===Http thread started\n");
+	trace("=== Http thread started\n");
 	
 	SEARCH_QUERY *query = (SEARCH_QUERY *) ctx;
 	
@@ -148,12 +150,13 @@ http_thread_func(void *ctx) {
 	
 //	fwrite(resp_str->str, resp_str->allocated_len, 1, stderr);
 	trace("\n");
-	trace("=== Parsing response\n");
+	trace("==== Parsing response\n");
 	parse_audio_resp(resp_str);
+	trace("==== Response parsed\n");
 	
 	free(method_url);
 	curl_easy_cleanup(curl);
-	trace("Http thread exit\n");
+	trace("=== Http thread exit\n");
 }
 
 void
@@ -205,7 +208,8 @@ on_search_results_row_activate(GtkTreeView *tree_view,
 
 void 
 on_search(GtkWidget *widget, gpointer data) {
-	// TODO block widget until thread is started
+	gtk_widget_set_sensitive(widget, FALSE);
+
 	if (http_tid) {
 		trace("Killing http thread");
 		deadbeef->thread_detach(http_tid);
@@ -224,6 +228,9 @@ on_search(GtkWidget *widget, gpointer data) {
 	query->store = GTK_LIST_STORE(data);
 	
 	http_tid = deadbeef->thread_start(http_thread_func, query);
+
+	gtk_widget_set_sensitive(widget, TRUE);
+	gtk_widget_grab_focus(widget);
 }
 
 static GtkWidget *
@@ -231,6 +238,7 @@ vk_create_add_tracks_dlg()
 {
 	GtkWidget *dlg;
 	GtkWidget *dlg_vbox;
+	GtkWidget *scroll_window;
 	GtkWidget *search_text;
 	GtkWidget *search_results;
 	GtkListStore *list_store;
@@ -242,6 +250,12 @@ vk_create_add_tracks_dlg()
 	gtk_window_set_title (GTK_WINDOW (dlg), "Search tracks");
 	gtk_window_set_type_hint (GTK_WINDOW (dlg), GDK_WINDOW_TYPE_HINT_DIALOG);
 	
+	dlg = gtk_dialog_new();
+	gtk_container_set_border_width(GTK_CONTAINER (dlg), 12);
+	gtk_window_set_default_size(GTK_WINDOW(dlg), 840, 400);
+	gtk_window_set_title(GTK_WINDOW(dlg), "Search tracks");
+	gtk_window_set_type_hint(GTK_WINDOW(dlg), GDK_WINDOW_TYPE_HINT_DIALOG);
+
 	dlg_vbox = gtk_dialog_get_content_area(GTK_DIALOG(dlg));
 
 	list_store = gtk_list_store_new(N_COLUMNS, 
@@ -254,18 +268,40 @@ vk_create_add_tracks_dlg()
 	gtk_box_pack_start(GTK_BOX(dlg_vbox), search_text, FALSE, FALSE, 0);
 	gtk_widget_show(search_text);	
 	g_signal_connect(search_text, "activate", G_CALLBACK(on_search), list_store);
-	
+
+	GtkCellRenderer *artist_cell;
+	GtkCellRenderer *title_cell;
+	GtkCellRenderer *duration_cell;	
 	search_results = gtk_tree_view_new_with_model(GTK_TREE_MODEL(list_store));
 	artist_cell = gtk_cell_renderer_text_new();
 	title_cell = gtk_cell_renderer_text_new();
+	duration_cell = gtk_cell_renderer_text_new();
 	gtk_tree_view_insert_column_with_attributes(GTK_TREE_VIEW(search_results),
 			-1, "Artist", artist_cell, "text", ARTIST_COLUMN, NULL);
 	gtk_tree_view_insert_column_with_attributes(GTK_TREE_VIEW(search_results), 
 			-1, "Title", title_cell, "text", TITLE_COLUMN, NULL);
+	gtk_tree_view_insert_column_with_attributes(GTK_TREE_VIEW(search_results), 
+			-1, "Duration", duration_cell, "text", DURATION_COLUMN, NULL);
 	g_signal_connect(search_results, "row-activated", 
 			G_CALLBACK(on_search_results_row_activate), NULL);
 	
-	gtk_box_pack_start(GTK_BOX(dlg_vbox), search_results, TRUE, TRUE, 12);
+	// allow column resize
+	GList *columns;
+	GList *i;
+	columns = gtk_tree_view_get_columns(GTK_TREE_VIEW(search_results));
+	i = g_list_first(columns);
+	while (i) {
+		GtkTreeViewColumn *col;
+		col = GTK_TREE_VIEW_COLUMN(i->data);
+		gtk_tree_view_column_set_resizable(col, TRUE);
+		
+		i = g_list_next(i);
+	}
+	g_list_free(columns);
+	
+	scroll_window = gtk_scrolled_window_new(NULL, NULL);
+	gtk_container_add(GTK_CONTAINER(scroll_window), search_results);
+	gtk_box_pack_start(GTK_BOX(dlg_vbox), scroll_window, TRUE, TRUE, 12);
 	gtk_widget_show_all(dlg);
 	
 	return dlg;
