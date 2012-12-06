@@ -9,17 +9,46 @@
 #include <json-glib/json-glib.h>
 
 #include "vkontakte.h"
-//#include "util.h"
+
 
 static DB_functions_t *deadbeef;
 static ddb_gtkui_t *gtkui_plugin;
+
+static struct {
+	const gchar *access_token;
+	guint user_id;
+	guint expires_in;
+} *vk_auth_data;
 
 static intptr_t http_tid;	// thread for communication
 static SEARCH_QUERY *query;
 
 static GtkWidget *add_tracks_dlg;
 
-static char *vk_access_token = "6c5333363c33ab586cd0ffe84c6c3ce15066c126c12b0f43cca3353edb37ffe";
+#define VK_AUTH_URL "http://oauth.vkontakte.ru/authorize?client_id=3035566&scope=audio,friends&redirect_uri=http://scorpspot.blogspot.com/p/vk-id.html&response_type=token"
+#define VK_API_URL "https://api.vk.com/method/"
+
+#define CONF_VK_AUTH_URL "vk.auth.url"
+#define CONF_VK_AUTH_DATA "vk.auth.data"
+
+/* 
+ * {"error":{
+ * 		"error_code":5,
+ * 		"error_msg":"User authorization failed: invalid access_token.",
+ * 		"request_params":[
+ * 			{"key":"oauth","value":"1"},
+ * 			{"key":"method","value":"audio.get"},
+ * 			{"key":"access_token","value""... 
+ */
+static char *VK_ERR_JSON_KEY = "error";
+static char *VK_ERR_JSON_CODE_KEY = "error_code";
+static char *VK_ERR_JSON_MSG_KEY = "error_msg";
+static char *VK_ERR_JSON_EXTRA_KEY = "request_params";
+typedef struct {
+	int error;
+	const gchar *err_msg;
+	const gchar *extra;
+} VkError;
 
 /**
  * List view columns.
@@ -32,12 +61,45 @@ enum {
 	N_COLUMNS
 };
 
-// TODO move to util.c
-gchar *
-strdup(const gchar *str) {
-	int len = strlen(str);
-	gchar *new_str = malloc(len);
-	return strcpy(new_str, str);
+
+void
+vk_error_free(VkError *err) {
+	assert(NULL != err);
+	g_free((gchar *) err->err_msg);
+	g_free((gchar *) err->extra);
+	g_free(err);
+}
+
+VkError*
+vk_error_check(JsonParser *parser) {
+	JsonNode *root = json_parser_get_root(parser);
+	
+	if (!JSON_NODE_HOLDS_OBJECT(root)) {
+		VkError *err = g_malloc(sizeof *err);
+		err->error = -1;
+		err->err_msg = "Root should be a JSON object";
+		err->extra = "";
+		return err;
+	}
+	
+	JsonObject * rootObj = json_node_get_object(root);
+	if (json_object_has_member(rootObj, VK_ERR_JSON_KEY)) {
+		rootObj = json_object_get_object_member(rootObj, VK_ERR_JSON_KEY);
+		assert(json_object_has_member(rootObj, VK_ERR_JSON_MSG_KEY));
+		
+		VkError *err = g_malloc(sizeof *err);
+		err->error = json_object_get_int_member(rootObj, VK_ERR_JSON_CODE_KEY);
+		err->err_msg = g_strdup(json_object_get_string_member(rootObj, VK_ERR_JSON_MSG_KEY));
+		if (json_object_has_member(rootObj, "request_params")) {
+			JsonGenerator *gen = json_generator_new();
+			json_generator_set_root(gen, json_object_get_member(rootObj, "request_params"));
+			err->extra = json_generator_to_data(gen, NULL);
+		} else {
+			err->extra = "";
+		}
+		return err;
+	}	
+	return NULL;
 }
 
 void
@@ -51,14 +113,14 @@ parse_audio_track(JsonArray *array, guint index_, JsonNode *element_node, gpoint
 	
 	// read data from json
 	int aid = json_object_get_int_member(track, "aid");
-	const char *artist = json_object_get_string_member(track, "artist");
+	const char *artist = g_strdup(json_object_get_string_member(track, "artist"));
 	int duration = json_object_get_int_member(track, "duration");
 	int owner_id = json_object_get_int_member(track, "owner_id");
-	const char *title = json_object_get_string_member(track, "title");
-	const char *url = json_object_get_string_member(track, "url");
+	const char *title = g_strdup(json_object_get_string_member(track, "title"));
+	const char *url = g_strdup(json_object_get_string_member(track, "url"));
 	
-	trace("%d (%d) %s - %s %d:%d %s\n", aid, owner_id, artist, title,
-		duration / 60, duration % 60, url);
+	//trace("%d (%d) %s - %s %d:%d %s\n", aid, owner_id, artist, title,
+	//	duration / 60, duration % 60, url);
 		
 	// write to list store
 	gtk_list_store_append(query->store, iter);
@@ -73,6 +135,7 @@ parse_audio_track(JsonArray *array, guint index_, JsonNode *element_node, gpoint
 void
 parse_audio_resp(GString *resp_str) {
 	GError *error;
+	VkError *vk_err;	
 	JsonParser *parser;
 	JsonNode *root;
 	JsonArray *tracks;
@@ -89,6 +152,15 @@ parse_audio_resp(GString *resp_str) {
 		return;
 	}
 	
+	vk_err = vk_error_check(parser);
+	if (NULL != vk_err) {
+		trace("Error from VK:\n%d\n%s\n%s\n", vk_err->error, vk_err->err_msg, vk_err->extra);
+		vk_error_free(vk_err);
+		g_object_unref(parser);
+		// TODO report error to user
+		return;
+	}
+			
 	root = json_parser_get_root(parser);
 	
 	assert(JSON_NODE_HOLDS_OBJECT(root));
@@ -129,8 +201,8 @@ http_thread_func(void *ctx) {
 	resp_str = g_string_new("");
 	
 	char *curl_err_buf = malloc(CURL_ERROR_SIZE);
-	char *method_url = malloc(strlen(VK_API_URL) + strlen(vk_access_token) + 24);
-	sprintf(method_url, "%s%s%s", VK_API_URL, "audio.get?access_token=", vk_access_token);
+	char *method_url = malloc(strlen(VK_API_URL) + strlen(vk_auth_data->access_token) + 24);
+	sprintf(method_url, "%s%s%s", VK_API_URL, "audio.get?access_token=", vk_auth_data->access_token);
 	curl_easy_setopt(curl, CURLOPT_URL, method_url);
 	curl_easy_setopt(curl, CURLOPT_USERAGENT, "deadbeef");
 	curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
@@ -148,7 +220,6 @@ http_thread_func(void *ctx) {
 		trace(curl_err_buf);
 	}
 	
-//	fwrite(resp_str->str, resp_str->allocated_len, 1, stderr);
 	trace("\n");
 	trace("==== Parsing response\n");
 	parse_audio_resp(resp_str);
@@ -176,11 +247,16 @@ vk_add_track_from_tree_store_to_playlist(GtkTreeIter *iter, ddb_playlist_t *plt)
 	DB_playItem_t *pt;
 	int pabort = 0;
 	
-	pt = deadbeef->plt_insert_file(plt, NULL, url, &pabort, NULL, NULL);
-	deadbeef->pl_add_meta(pt, "artist", artist);
-	deadbeef->pl_add_meta(pt, "title", title);
-	deadbeef->plt_set_item_duration(plt, pt, duration);
-	deadbeef->pl_item_ref(pt);
+	deadbeef->pl_lock();
+	if (!deadbeef->pl_add_files_begin(plt)) {
+		pt = deadbeef->plt_insert_file(plt, NULL, url, &pabort, NULL, NULL);
+		deadbeef->pl_add_meta(pt, "artist", artist);
+		deadbeef->pl_add_meta(pt, "title", title);
+		deadbeef->plt_set_item_duration(plt, pt, duration);
+		deadbeef->pl_add_files_end();
+		// there is no legal way to refresh the playlist :(
+	}
+	deadbeef->pl_unlock();
 	
 	free(artist);
 	free(title);
@@ -224,7 +300,7 @@ on_search(GtkWidget *widget, gpointer data) {
 	trace("== Searching for %s\n", query_text);
 
 	query = malloc(sizeof(SEARCH_QUERY));
-	query->query = strdup(query_text);
+	query->query = g_strdup(query_text);
 	query->store = GTK_LIST_STORE(data);
 	
 	http_tid = deadbeef->thread_start(http_thread_func, query);
@@ -269,8 +345,6 @@ vk_create_add_tracks_dlg()
 	gtk_widget_show(search_text);	
 	g_signal_connect(search_text, "activate", G_CALLBACK(on_search), list_store);
 
-	GtkCellRenderer *artist_cell;
-	GtkCellRenderer *title_cell;
 	GtkCellRenderer *duration_cell;	
 	search_results = gtk_tree_view_new_with_model(GTK_TREE_MODEL(list_store));
 	artist_cell = gtk_cell_renderer_text_new();
@@ -337,7 +411,22 @@ vk_getactions(DB_playItem_t *it) {
     return &vk_action;
 }
 
-int vk_connect() {
+int 
+vk_stop() {
+	if (vk_auth_data != NULL) {
+		g_free((gchar *) vk_auth_data->access_token);
+		g_free(vk_auth_data);
+	}
+	
+	if (query != NULL) {
+		g_free(query->query);
+		// TODO g_free query->store ?
+		g_free(query);
+	}
+}
+
+int 
+vk_connect() {
 #if GTK_CHECK_VERSION(3,0,0)
     gtkui_plugin = (ddb_gtkui_t *)deadbeef->plug_get_for_id ("gtkui3");
 #else
@@ -347,8 +436,39 @@ int vk_connect() {
     if(!gtkui_plugin) {
         return -1;
     }
+	
+	/* Read config */
+	// restore auth url if it was occasionally changed
+	deadbeef->conf_set_str(CONF_VK_AUTH_URL, VK_AUTH_URL);
+	// read VK auth data
+	const gchar *auth_data_str = deadbeef->conf_get_str_fast(CONF_VK_AUTH_DATA, NULL);
+	if (auth_data_str != NULL 
+			&& strlen(auth_data_str) > 0) {
+		GError *error;
+		JsonParser *parser = json_parser_new();
+		
+		if (!json_parser_load_from_data(parser, auth_data_str, strlen(auth_data_str), &error)) {
+			trace("VK auth data invalid, clearing");
+			g_free(error);
+			g_object_unref(parser);
+		}
+		
+		assert(JSON_NODE_HOLDS_OBJECT(json_parser_get_root(parser)));
+		JsonObject *root = json_node_get_object(json_parser_get_root(parser));
+		
+		vk_auth_data = g_malloc(sizeof *vk_auth_data);
+		vk_auth_data->access_token = g_strdup(json_object_get_string_member(root, "access_token"));
+		vk_auth_data->user_id = json_object_get_int_member(root, "user_id");
+		vk_auth_data->expires_in = json_object_get_int_member(root, "expires_in");
+		
+		g_object_unref(parser);
+	}
     return 0;
 }
+
+static const char vk_config_dlg[] = 
+	"property \"Navigate to the URL below\n(don't change the URL)\" entry " CONF_VK_AUTH_URL " " VK_AUTH_URL ";\n"
+	"property \"Paste data from the page here\" entry " CONF_VK_AUTH_DATA " \"\";\n";
 
 DB_misc_t plugin = {
     .plugin.api_vmajor = 1,
@@ -362,6 +482,8 @@ DB_misc_t plugin = {
     .plugin.copyright = 
         "TODO (C) scorpp\n",
     .plugin.website = "http://TODO.com",
+	.plugin.configdialog = vk_config_dlg,
+	.plugin.stop = vk_stop,
 	.plugin.connect = vk_connect,
 	.plugin.get_actions = vk_getactions,
 };

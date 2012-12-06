@@ -4,7 +4,6 @@
 #include <glib/gprintf.h>
 
 #define trace(...) { g_fprintf(stderr, __VA_ARGS__); }
-//#define strdup(str) ( strcpy(malloc(strlen(str)), str) )
 
 #ifdef ENABLE_NLS
 #include <libintl.h>
@@ -13,19 +12,16 @@
 #define _(X) (X)
 #endif
 
-#define VK_AUTH_URL "http://oauth.vkontakte.ru/authorize?client_id=3035566&scope=audio,friends&redirect_uri=http://scorpspot.blogspot.com&response_type=token"
-#define VK_API_URL "https://api.vk.com/method/"
-
 typedef struct {
-	char *query;
+	gchar *query;
 	GtkListStore *store;
 } SEARCH_QUERY;
 
 typedef struct {
 	int aid;
 	int owner_id;
-	const char *artist;
-	const char *title;
+	const gchar *artist;
+	const gchar *title;
 	int duration;	// seconds
 	const char *url;
 } VK_AUDIO_INFO;
