@@ -44,6 +44,7 @@ static char *VK_ERR_JSON_KEY = "error";
 static char *VK_ERR_JSON_CODE_KEY = "error_code";
 static char *VK_ERR_JSON_MSG_KEY = "error_msg";
 static char *VK_ERR_JSON_EXTRA_KEY = "request_params";
+// TODO use GError instead?
 typedef struct {
 	int error;
 	const gchar *err_msg;
@@ -61,6 +62,28 @@ enum {
 	N_COLUMNS
 };
 
+
+gboolean
+show_message(GtkMessageType messageType, const gchar *message) {
+	GtkWidget *dlg = 
+	gtk_message_dialog_new(NULL,
+						   GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
+						   messageType,
+						   GTK_BUTTONS_OK,
+						   message);
+	// for some reasone after calling gtk_dialog_run dialog cannot be closed
+	g_signal_connect_swapped (dlg, "response", G_CALLBACK (gtk_widget_destroy), dlg);
+	gtk_widget_show(dlg);		
+	return FALSE;
+}
+
+void 
+vk_auth_data_free() {
+	if (vk_auth_data != NULL) {
+		g_free((gchar *) vk_auth_data->access_token);
+		g_free(vk_auth_data);
+	}
+}
 
 void
 vk_error_free(VkError *err) {
@@ -154,10 +177,10 @@ parse_audio_resp(GString *resp_str) {
 	
 	vk_err = vk_error_check(parser);
 	if (NULL != vk_err) {
+		show_message(GTK_MESSAGE_ERROR, vk_err->err_msg);	// TODO test
 		trace("Error from VK:\n%d\n%s\n%s\n", vk_err->error, vk_err->err_msg, vk_err->extra);
 		vk_error_free(vk_err);
 		g_object_unref(parser);
-		// TODO report error to user
 		return;
 	}
 			
@@ -310,8 +333,7 @@ on_search(GtkWidget *widget, gpointer data) {
 }
 
 static GtkWidget *
-vk_create_add_tracks_dlg()
-{
+vk_create_add_tracks_dlg() {
 	GtkWidget *dlg;
 	GtkWidget *dlg_vbox;
 	GtkWidget *scroll_window;
@@ -383,6 +405,15 @@ vk_create_add_tracks_dlg()
 
 static gboolean
 vk_action_gtk (void *data) {
+	if (vk_auth_data == NULL) {
+		// not authenticated, show warning and that's it		
+		show_message(GTK_MESSAGE_WARNING,
+					 "To be able to use VKontakte plugin you need to provide "					 
+					 "your authentication detials. Please vist plugin configuration. "
+					 "Then you will be able to add tracks from VK.com");
+		return FALSE;
+	}
+	
     add_tracks_dlg = vk_create_add_tracks_dlg();
     gtk_widget_set_size_request (add_tracks_dlg, 400, 400);
     gtk_window_set_transient_for(GTK_WINDOW(add_tracks_dlg),
@@ -413,10 +444,7 @@ vk_getactions(DB_playItem_t *it) {
 
 int 
 vk_stop() {
-	if (vk_auth_data != NULL) {
-		g_free((gchar *) vk_auth_data->access_token);
-		g_free(vk_auth_data);
-	}
+	vk_auth_data_free();
 	
 	if (query != NULL) {
 		g_free(query->query);
@@ -436,10 +464,15 @@ vk_connect() {
     if(!gtkui_plugin) {
         return -1;
     }
-	
-	/* Read config */
+	    
+	return 0;
+}
+
+void 
+vk_config_changed() {
 	// restore auth url if it was occasionally changed
-	deadbeef->conf_set_str(CONF_VK_AUTH_URL, VK_AUTH_URL);
+	deadbeef->conf_set_str(CONF_VK_AUTH_URL, VK_AUTH_URL);	
+	
 	// read VK auth data
 	const gchar *auth_data_str = deadbeef->conf_get_str_fast(CONF_VK_AUTH_DATA, NULL);
 	if (auth_data_str != NULL 
@@ -462,8 +495,20 @@ vk_connect() {
 		vk_auth_data->expires_in = json_object_get_int_member(root, "expires_in");
 		
 		g_object_unref(parser);
+	} else {
+		vk_auth_data_free();
+		vk_auth_data = NULL;
 	}
-    return 0;
+}
+
+int 
+vk_db_message(uint32_t id, uintptr_t ctx, uint32_t p1, uint32_t p2) {
+	switch (id) {
+		case DB_EV_CONFIGCHANGED:
+			vk_config_changed();
+			break;
+	}
+	return 0;
 }
 
 static const char vk_config_dlg[] = 
@@ -485,6 +530,7 @@ DB_misc_t plugin = {
 	.plugin.configdialog = vk_config_dlg,
 	.plugin.stop = vk_stop,
 	.plugin.connect = vk_connect,
+	.plugin.message = vk_db_message,
 	.plugin.get_actions = vk_getactions,
 };
 
