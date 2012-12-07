@@ -512,7 +512,7 @@ vk_db_message(uint32_t id, uintptr_t ctx, uint32_t p1, uint32_t p2) {
 }
 
 static const char vk_config_dlg[] = 
-	"property \"Navigate to the URL below\n(don't change the URL)\" entry " CONF_VK_AUTH_URL " " VK_AUTH_URL ";\n"
+	"property \"Navigate to the URL in text box\n(don't change the URL here)\" entry " CONF_VK_AUTH_URL " " VK_AUTH_URL ";\n"
 	"property \"Paste data from the page here\" entry " CONF_VK_AUTH_DATA " \"\";\n";
 
 DB_misc_t plugin = {
