@@ -7,24 +7,25 @@
 #include <gtk/gtk.h>
 #include <deadbeef/deadbeef.h>
 #include <deadbeef/gtkui_api.h>
-#include <curl/curl.h>
 #include <glib-object.h>
 #include <json-glib/json-glib.h>
 
-#include "vkontakte.h"
+#include "common-defs.h"
 #include "vk-api.h"
+#include "ui.h"
 
-static DB_functions_t *deadbeef;
-static ddb_gtkui_t *gtkui_plugin;
+DB_functions_t *deadbeef;
+ddb_gtkui_t *gtkui_plugin;
 
-static struct {
-	const gchar *access_token;
-	guint user_id;
-	guint expires_in;
-} *vk_auth_data = NULL;
+static VkAuthData *vk_auth_data = NULL;
 
 static intptr_t http_tid;	// thread for communication
-static SEARCH_QUERY *query = NULL;
+
+typedef struct {
+    gchar *query;
+    GtkListStore *store;
+} SeachQuery;
+static SeachQuery *query = NULL;
 
 #define VK_AUTH_APP_ID "3035566"
 #define VK_AUTH_REDIR_URL "http://scorpspot.blogspot.com/p/vk-id.html"
@@ -32,85 +33,15 @@ static SEARCH_QUERY *query = NULL;
 		"&scope=audio,friends&redirect_uri=" VK_AUTH_REDIR_URL \
 		"&response_type=token"
 
-#define VK_API_URL "https://api.vk.com/method/"
 
 #define CONF_VK_AUTH_URL "vk.auth.url"
 #define CONF_VK_AUTH_DATA "vk.auth.data"
 
-#define VK_PLUGIN_DOMAIN_STR "vkontakte deadbeef plugin"
-/* 
- * {"error":{
- * 		"error_code":5,
- * 		"error_msg":"User authorization failed: invalid access_token.",
- * 		"request_params":[
- * 			{"key":"oauth","value":"1"},
- * 			{"key":"method","value":"audio.get"},
- * 			{"key":"access_token","value""... 
- */
-#define VK_ERR_JSON_KEY			"error"
-#define VK_ERR_JSON_CODE_KEY	"error_code"
-#define VK_ERR_JSON_MSG_KEY		"error_msg"
-#define VK_ERR_JSON_EXTRA_KEY	"request_params"
+
+gchar *     http_get_string(const gchar *url, GError **error);
 
 
-/**
- * List view columns.
- */
-enum {
-    ARTIST_COLUMN,
-    TITLE_COLUMN,
-    DURATION_COLUMN,
-    URL_COLUMN,
-    N_COLUMNS
-};
-
-gboolean
-show_message (GtkMessageType messageType, const gchar *message) {
-	GtkWidget *dlg;
-	
-	dlg =  gtk_message_dialog_new (NULL,
-	                               GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
-	                               messageType,
-	                               GTK_BUTTONS_OK,
-	                               "%s",
-	                               message);
-	g_signal_connect_swapped (dlg, "response", G_CALLBACK (gtk_widget_destroy), dlg);
-	gtk_dialog_run (GTK_DIALOG (dlg) );
-	return FALSE;
-}
-
-void
-vk_auth_data_free() {
-	if (vk_auth_data != NULL) {
-		g_free ( (gchar *) vk_auth_data->access_token);
-		g_free (vk_auth_data);
-	}
-}
-
-gboolean
-vk_error_check (JsonParser *parser, GError **error) {
-	JsonNode *root = json_parser_get_root (parser);
-	
-	if (!JSON_NODE_HOLDS_OBJECT (root) ) {
-		*error = g_error_new_literal (g_quark_from_static_string (VK_PLUGIN_DOMAIN_STR),
-		                              -1,
-		                              "Root should be a JSON object");
-		return FALSE;
-	}
-	
-	JsonObject * rootObj = json_node_get_object (root);
-	if (json_object_has_member (rootObj, VK_ERR_JSON_KEY) ) {
-		rootObj = json_object_get_object_member (rootObj, VK_ERR_JSON_KEY);
-		assert (json_object_has_member (rootObj, VK_ERR_JSON_MSG_KEY) );
-		
-		*error = g_error_new_literal (g_quark_from_static_string (VK_PLUGIN_DOMAIN_STR),
-		                              json_object_get_int_member (rootObj, VK_ERR_JSON_CODE_KEY),
-		                              g_strdup (json_object_get_string_member (rootObj, VK_ERR_JSON_MSG_KEY) ) );
-		return FALSE;
-	}
-	return TRUE;
-}
-
+// TODO move to vk-api
 void
 parse_audio_track (JsonArray *array, guint index_, JsonNode *element_node, gpointer user_data) {
 	// first element may contain number of elements
@@ -126,16 +57,13 @@ parse_audio_track (JsonArray *array, guint index_, JsonNode *element_node, gpoin
 	track = json_node_get_object (element_node);
 	
 	// read data from json
-	int aid = json_object_get_int_member (track, "aid");
-	const char *artist = g_strdup (json_object_get_string_member (track, "artist") );
+//	int aid = json_object_get_int_member (track, "aid");
+	const char *artist = json_object_get_string_member (track, "artist");
 	int duration = json_object_get_int_member (track, "duration");
-	int owner_id = json_object_get_int_member (track, "owner_id");
-	const char *title = /*g_strdup */(json_object_get_string_member (track, "title") );
-	const char *url = /*g_strdup*/ (json_object_get_string_member (track, "url") );
-	
-	//trace("%d (%d) %s - %s %d:%d %s\n", aid, owner_id, artist, title,
-	//	duration / 60, duration % 60, url);
-	
+//	int owner_id = json_object_get_int_member (track, "owner_id");
+	const char *title = json_object_get_string_member (track, "title");
+	const char *url = json_object_get_string_member (track, "url");
+
 	// write to list store
 	gtk_list_store_append (query->store, iter);
 	gtk_list_store_set (query->store, iter,
@@ -145,8 +73,10 @@ parse_audio_track (JsonArray *array, guint index_, JsonNode *element_node, gpoin
 	                    URL_COLUMN, url,
 	                    -1);
 }
+
+// TODO move to vk-api
 void
-parse_audio_resp (GString *resp_str) {
+parse_audio_resp (const gchar *resp_str) {
 	GError *error;
 	JsonParser *parser;
 	JsonNode *root;
@@ -156,7 +86,7 @@ parse_audio_resp (GString *resp_str) {
 	
 	parser = json_parser_new();
 	
-	if (!json_parser_load_from_data (parser, resp_str->str, -1, &error) ) {
+	if (!json_parser_load_from_data (parser, resp_str, -1, &error) ) {
 		trace ("Unable to parse audio response: %s\n", error->message);
 		gdk_threads_enter();
 		show_message (GTK_MESSAGE_ERROR, "Unable to parse VK response");
@@ -194,56 +124,26 @@ parse_audio_resp (GString *resp_str) {
 	g_object_unref (parser);
 }
 
-size_t
-http_write_data ( char *ptr, size_t size, size_t nmemb, void *userdata) {
-	GString *resp_str = (GString *) userdata;
-	g_string_append_len (resp_str, ptr, size * nmemb);
-	return size * nmemb;
-}
-
 void
-http_thread_func (void *ctx) {
-	trace ("=== Http thread started\n");
-	
-	SEARCH_QUERY *query = (SEARCH_QUERY *) ctx;
-	
-	CURL *curl;
-	GString *resp_str;
-	
-	curl = curl_easy_init();
-	resp_str = g_string_new ("");
-	
-	char *curl_err_buf = malloc (CURL_ERROR_SIZE);
-	char *method_url = g_strdup_printf ("%saudio.search?access_token=%s&q=%s",
-										VK_API_URL,
+vk_search_audio_thread_func (void *ctx) {
+	SeachQuery *query = (SeachQuery *) ctx;
+	GError *error;
+	gchar *resp_str;
+
+	char *method_url = g_strdup_printf (VK_API_METHOD_AUDIO_SEARCH "?access_token=%s&q=%s",
 										vk_auth_data->access_token,
 										query->query);
-
-	trace ("Requesting URL %s\n", method_url);
-	curl_easy_setopt (curl, CURLOPT_URL, method_url);
-	curl_easy_setopt (curl, CURLOPT_USERAGENT, "deadbeef");
-	curl_easy_setopt (curl, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
-	// enable up to 10 redirects
-	curl_easy_setopt (curl, CURLOPT_FOLLOWLOCATION, 1);
-	curl_easy_setopt (curl, CURLOPT_MAXREDIRS, 10);
-	// setup handlers
-	curl_easy_setopt (curl, CURLOPT_WRITEFUNCTION, http_write_data);
-	curl_easy_setopt (curl, CURLOPT_WRITEDATA, resp_str);
-	curl_easy_setopt (curl, CURLOPT_ERRORBUFFER, curl_err_buf);
 	
-	int status = curl_easy_perform (curl);
-	trace ("\ncurl_easy_perform(..) returned %d\n", status);
-	if (status != 0) {
-		trace ("%s\n", curl_err_buf);
+	resp_str = http_get_string (method_url, &error);
+	if (NULL == resp_str) {
+	    trace ("VK error: %s\n", error->message);
+	    g_error_free (error);
+	} else {
+	    parse_audio_resp (resp_str);
 	}
 	
-	trace ("==== Parsing response\n");
-	parse_audio_resp (resp_str);
-	trace ("==== Response parsed\n");
-	
 	g_free (method_url);
-	curl_easy_cleanup (curl);
-	trace ("=== Http thread exit\n");
+
 }
 
 void
@@ -280,191 +180,23 @@ vk_add_track_from_tree_store_to_playlist (GtkTreeIter *iter, ddb_playlist_t *plt
 }
 
 void
-on_search_results_row_activate (GtkTreeView *tree_view,
-                                GtkTreePath *path,
-                                GtkTreeViewColumn *column,
-                                gpointer user_data) {
-	GtkTreeModel *model;
-	GtkTreeIter iter;
-	ddb_playlist_t *plt;
-	
-	model = gtk_tree_view_get_model (tree_view);
-	plt = deadbeef->plt_get_curr();
-	
-	if (gtk_tree_model_get_iter (model, &iter, path) ) {
-		vk_add_track_from_tree_store_to_playlist (&iter, plt);
-	}
-	
-	deadbeef->plt_unref (plt);
-}
+vk_search_music (const gchar *query_text, GtkListStore *liststore) {
+    if (http_tid) {
+        trace("Killing http thread\n");
+        deadbeef->thread_detach (http_tid);
+        free (query->query);
+        free (query);
 
-static void
-on_menu_item_add_to_playlist(GtkWidget *menuItem, gpointer userdata) {
-    GtkTreeView *treeview;
-    GtkTreeSelection *selection;
-    GtkTreeModel *treemodel;
-    GList *selected_rows, *i;
-
-    treeview = GTK_TREE_VIEW (userdata);
-    selection = gtk_tree_view_get_selection (treeview);
-    selected_rows = gtk_tree_selection_get_selected_rows (selection, &treemodel);
-
-    i = g_list_first (selected_rows);
-    while (i) {
-        GtkTreePath *path;
-        GtkTreeIter treeiter;
-
-        path = (GtkTreePath *) i->data;
-        gtk_tree_model_get_iter(treemodel, &treeiter, path);
-        vk_add_track_from_tree_store_to_playlist (&treeiter, deadbeef->plt_get_curr ());
-
-        i = g_list_next (i);
+        http_tid = 0;
+        query = NULL;
     }
+    trace("== Searching for %s\n", query_text);
 
-    g_list_free(selected_rows);
-}
+    query = malloc (sizeof(SeachQuery));
+    query->query = g_strdup (query_text);
+    query->store = liststore;
 
-static void
-show_popup_menu(GtkTreeView *treeview, GdkEventButton *event) {
-    GtkWidget *menu, *item;
-
-    menu = gtk_menu_new ();
-
-    item = gtk_menu_item_new_with_label ("Add to playlist");
-    g_signal_connect(item, "activate", G_CALLBACK(on_menu_item_add_to_playlist), treeview);
-    gtk_menu_shell_append (GTK_MENU_SHELL(menu), item);
-
-//    item = gtk_menu_item_new_with_label ("Clear playlist")
-//    gtk_menu_shell_append (GTK_MENU_SHELL(menu), item);
-
-    gtk_widget_show_all (menu);
-    gtk_menu_popup (GTK_MENU(menu), NULL, NULL, NULL, NULL, 0,
-                    gdk_event_get_time ((GdkEvent *) event));
-}
-
-gboolean
-on_search_results_button_press (GtkTreeView *treeview, GdkEventButton *event, gpointer userdata) {
-    if (event->type == GDK_BUTTON_PRESS && event->button == 3) {
-        GtkTreeSelection *selection;
-
-        selection = gtk_tree_view_get_selection (treeview);
-        if (gtk_tree_selection_count_selected_rows (selection) <= 1) {
-            GtkTreePath *path;
-            if (gtk_tree_view_get_path_at_pos (treeview, event->x, event->y, &path, NULL, NULL, NULL )) {
-                gtk_tree_selection_unselect_all(selection);
-                gtk_tree_selection_select_path (selection, path);
-                gtk_tree_path_free (path);
-            }
-        }
-
-        show_popup_menu (treeview, event);
-        return TRUE;
-    }
-    return FALSE;
-}
-
-gboolean
-on_search_results_popup_menu (GtkTreeView *treeview, gpointer userdata) {
-    show_popup_menu(treeview, NULL);
-    return TRUE;
-}
-
-void
-on_search (GtkWidget *widget, gpointer data) {
-	gtk_widget_set_sensitive (widget, FALSE);
-	
-	if (http_tid) {
-		trace ("Killing http thread\n");
-		deadbeef->thread_detach (http_tid);
-		free (query->query);
-		free (query);
-		
-		http_tid = 0;
-		query = NULL;
-	}
-	
-	const gchar *query_text = gtk_entry_get_text (GTK_ENTRY (widget) );
-	trace ("== Searching for %s\n", query_text);
-	
-	query = malloc (sizeof (SEARCH_QUERY) );
-	query->query = g_strdup (query_text);
-	query->store = GTK_LIST_STORE (data);
-	
-	http_tid = deadbeef->thread_start (http_thread_func, query);
-	
-	gtk_widget_set_sensitive (widget, TRUE);
-	gtk_widget_grab_focus (widget);
-}
-
-static GtkWidget *
-vk_create_add_tracks_dlg () {
-    GtkWidget *dlg;
-    GtkWidget *dlg_vbox;
-    GtkWidget *scroll_window;
-    GtkWidget *search_text;
-    GtkWidget *search_results;
-    GtkListStore *list_store;
-    GtkCellRenderer *artist_cell;
-    GtkCellRenderer *title_cell;
-    GtkTreeSelection *selection;
-	
-	dlg = gtk_dialog_new ();
-    gtk_container_set_border_width (GTK_CONTAINER (dlg), 12);
-    gtk_window_set_default_size (GTK_WINDOW (dlg), 840, 400);
-    gtk_window_set_title (GTK_WINDOW (dlg), "Search tracks");
-    gtk_window_set_type_hint (GTK_WINDOW (dlg), GDK_WINDOW_TYPE_HINT_DIALOG);
-	
-	dlg_vbox = gtk_dialog_get_content_area (GTK_DIALOG (dlg) );
-
-    list_store = gtk_list_store_new (N_COLUMNS,
-                                     G_TYPE_STRING,	    // ARTIST
-                                     G_TYPE_STRING,     // TITLE
-                                     G_TYPE_INT,		// DURATION seconds, not rendered
-                                     G_TYPE_STRING );	// URL, not rendered
-
-    search_text = gtk_entry_new ();
-    gtk_box_pack_start (GTK_BOX (dlg_vbox), search_text, FALSE, FALSE, 0);
-    gtk_widget_show (search_text);
-    g_signal_connect(search_text, "activate", G_CALLBACK (on_search), list_store);
-	
-	GtkCellRenderer *duration_cell;
-    search_results = gtk_tree_view_new_with_model (GTK_TREE_MODEL (list_store) );
-    artist_cell = gtk_cell_renderer_text_new ();
-    title_cell = gtk_cell_renderer_text_new ();
-    duration_cell = gtk_cell_renderer_text_new ();
-    gtk_tree_view_insert_column_with_attributes (GTK_TREE_VIEW (search_results), -1, "Artist",
-                                                 artist_cell, "text", ARTIST_COLUMN, NULL );
-    gtk_tree_view_insert_column_with_attributes (GTK_TREE_VIEW (search_results), -1, "Title",
-                                                 title_cell, "text", TITLE_COLUMN, NULL );
-    gtk_tree_view_insert_column_with_attributes (GTK_TREE_VIEW (search_results), -1, "Duration",
-                                                 duration_cell, "text", DURATION_COLUMN, NULL );
-	// allow column resize
-	GList *columns;
-	GList *i;
-	columns = gtk_tree_view_get_columns (GTK_TREE_VIEW (search_results) );
-	i = g_list_first (columns);
-	while (i) {
-		GtkTreeViewColumn *col;
-		col = GTK_TREE_VIEW_COLUMN (i->data);
-		gtk_tree_view_column_set_resizable (col, TRUE);
-		
-		i = g_list_next (i);
-	}
-	g_list_free (columns);
-
-    selection = gtk_tree_view_get_selection (GTK_TREE_VIEW (search_results));
-    gtk_tree_selection_set_mode (selection, GTK_SELECTION_MULTIPLE);
-
-    g_signal_connect(search_results, "row-activated", G_CALLBACK (on_search_results_row_activate), NULL);
-    g_signal_connect(search_results, "popup-menu", G_CALLBACK(on_search_results_popup_menu), NULL);
-    g_signal_connect(search_results, "button-press-event", G_CALLBACK(on_search_results_button_press), NULL);
-
-	scroll_window = gtk_scrolled_window_new (NULL, NULL);
-	gtk_container_add (GTK_CONTAINER (scroll_window), search_results);
-	gtk_box_pack_start (GTK_BOX (dlg_vbox), scroll_window, TRUE, TRUE, 12);
-	gtk_widget_show_all (dlg);
-	
-	return dlg;
+    http_tid = deadbeef->thread_start (vk_search_audio_thread_func, query);
 }
 
 static gboolean
@@ -504,30 +236,8 @@ vk_config_changed() {
 
     // read VK auth data
     const gchar *auth_data_str = deadbeef->conf_get_str_fast (CONF_VK_AUTH_DATA, NULL);
-    if (auth_data_str != NULL
-            && strlen (auth_data_str) > 0) {
-        GError *error;
-        JsonParser *parser = json_parser_new();
-
-        if (!json_parser_load_from_data (parser, auth_data_str, strlen (auth_data_str), &error) ) {
-            trace ("VK auth data invalid, clearing");
-            g_free (error);
-            g_object_unref (parser);
-        }
-
-        assert (JSON_NODE_HOLDS_OBJECT (json_parser_get_root (parser) ) );
-        JsonObject *root = json_node_get_object (json_parser_get_root (parser) );
-
-        vk_auth_data = g_malloc (sizeof *vk_auth_data);
-        vk_auth_data->access_token = g_strdup (json_object_get_string_member (root, "access_token") );
-        vk_auth_data->user_id = json_object_get_int_member (root, "user_id");
-        vk_auth_data->expires_in = json_object_get_int_member (root, "expires_in");
-
-        g_object_unref (parser);
-    } else {
-        vk_auth_data_free();
-        vk_auth_data = NULL;
-    }
+    vk_auth_data_free (vk_auth_data);
+    vk_auth_data = vk_auth_data_parse (auth_data_str);
 }
 
 int
@@ -553,7 +263,7 @@ static DB_plugin_action_t vk_action = {
     .next = NULL,
 };
 
-DB_plugin_action_t *
+static DB_plugin_action_t *
 vk_ddb_getactions (DB_playItem_t *it) {
     return &vk_action;
 }
@@ -567,7 +277,7 @@ vk_ddb_getactions (DB_playItem_t *it) {
  * @param p2 ?
  * @return ?
  */
-int
+static int
 vk_ddb_message (uint32_t id, uintptr_t ctx, uint32_t p1, uint32_t p2) {
 	switch (id) {
 	case DB_EV_CONFIGCHANGED:
@@ -577,9 +287,9 @@ vk_ddb_message (uint32_t id, uintptr_t ctx, uint32_t p1, uint32_t p2) {
 	return 0;
 }
 
-int
+static int
 vk_ddb_stop() {
-    vk_auth_data_free();
+    vk_auth_data_free(vk_auth_data);
 
     if (query != NULL) {
         g_free (query->query);
