@@ -13,14 +13,13 @@ Installation
  * gtk+ (2 or 3 - should correspond to GTK version your Deadbeef is built with)
  * json-glib
  * curl
+ * cmake
 
 ### Building
 Build it with
 
-    gcc -c vkontakte.c -o vkontakte.so -g -std=c99 -I. \
-        `pkg-config --cflags --libs gtk+-3.0` \
-        `pkg-config --cflags --libs json-glib-1.0` \
-        `pkg-config --cflags --libs libcurl`
+    cmake .
+    make
 and copy `vkontakte.so` to `~/.local/lib/deadbeef` like this:
     
     mkdir -p ~/.local/lib/deabeef
