@@ -1,13 +1,9 @@
 // disable gdk_thread_enter\leave warnings
 #define GDK_VERSION_MIN_REQUIRED GDK_VERSION_3_4
 
-#include <stdlib.h>
-#include <assert.h>
-#include <string.h>
 #include <gtk/gtk.h>
 #include <deadbeef/deadbeef.h>
 #include <deadbeef/gtkui_api.h>
-#include <glib-object.h>
 #include <json-glib/json-glib.h>
 
 #include "common-defs.h"
@@ -23,9 +19,8 @@ static intptr_t http_tid;	// thread for communication
 
 typedef struct {
     gchar *query;
-    GtkListStore *store;
+    GtkTreeModel *store;
 } SeachQuery;
-static SeachQuery *query = NULL;
 
 #define VK_AUTH_APP_ID "3035566"
 #define VK_AUTH_REDIR_URL "http://scorpspot.blogspot.com/p/vk-id.html"
@@ -38,127 +33,56 @@ static SeachQuery *query = NULL;
 #define CONF_VK_AUTH_DATA "vk.auth.data"
 
 
+// util.c
 gchar *     http_get_string(const gchar *url, GError **error);
 
 
-// TODO move to vk-api
-void
-parse_audio_track (JsonArray *array, guint index_, JsonNode *element_node, gpointer user_data) {
-	// first element may contain number of elements
-	if (index_ == 0 && JSON_NODE_VALUE == json_node_get_node_type (element_node) ) {
-		return;
-	}
-	
-	assert (JSON_NODE_HOLDS_OBJECT (element_node) );
-	GtkTreeIter *iter;
-	JsonObject *track;
-	
-	iter = (GtkTreeIter *) user_data;
-	track = json_node_get_object (element_node);
-	
-	// read data from json
-//	int aid = json_object_get_int_member (track, "aid");
-	const char *artist = json_object_get_string_member (track, "artist");
-	int duration = json_object_get_int_member (track, "duration");
-//	int owner_id = json_object_get_int_member (track, "owner_id");
-	const char *title = json_object_get_string_member (track, "title");
-	const char *url = json_object_get_string_member (track, "url");
+static void
+parse_audio_track_callback (VkAudioTrack *track, guint index, gpointer userdata) {
+	GtkTreeModel *treestore;
+	GtkTreeIter iter;
+
+	treestore = GTK_TREE_MODEL (userdata);
 
 	// write to list store
-	gtk_list_store_append (query->store, iter);
-	gtk_list_store_set (query->store, iter,
-	                    ARTIST_COLUMN, artist,
-	                    TITLE_COLUMN, title,
-	                    DURATION_COLUMN, duration,
-	                    URL_COLUMN, url,
+	gtk_list_store_append(GTK_LIST_STORE (treestore), &iter);
+	gtk_list_store_set (GTK_LIST_STORE (treestore), &iter,
+	                    ARTIST_COLUMN, track->artist,
+	                    TITLE_COLUMN, track->title,
+	                    DURATION_COLUMN, track->duration,
+	                    URL_COLUMN, track->url,
 	                    -1);
 }
 
-// TODO move to vk-api
-void
-parse_audio_resp (const gchar *resp_str) {
+static void
+parse_audio_resp (GtkTreeModel *treestore, const gchar *resp_str) {
 	GError *error;
-	JsonParser *parser;
-	JsonNode *root;
-	JsonArray *tracks;
-	JsonObject *tmp_obj;
-	JsonNode *tmp_node;
-	
-	parser = json_parser_new();
-	
-	if (!json_parser_load_from_data (parser, resp_str, -1, &error) ) {
-		trace ("Unable to parse audio response: %s\n", error->message);
-		gdk_threads_enter();
-		show_message (GTK_MESSAGE_ERROR, "Unable to parse VK response");
-		gdk_threads_leave();
+
+	gdk_threads_enter ();
+	gtk_list_store_clear (GTK_LIST_STORE (treestore));
+
+	if (!vk_audio_response_parse (resp_str, parse_audio_track_callback, treestore, &error)) {
+		show_message(GTK_MESSAGE_ERROR, error->message);
 		g_error_free (error);
-		g_object_unref (parser);
-		return;
 	}
-	
-	if (!vk_error_check (parser, &error) ) {
-		trace ("Error from VK: %d, %s\n", error->code, error->message);
-		gdk_threads_enter();
-		show_message (GTK_MESSAGE_ERROR, error->message);	// TODO test
-		gdk_threads_leave();
-		g_error_free (error);
-		g_object_unref (parser);
-		return;
-	}
-	
-	root = json_parser_get_root (parser);
-	
-	assert (JSON_NODE_HOLDS_OBJECT (root) );
-	tmp_obj = json_node_get_object (root);
-	tmp_node = json_object_get_member (tmp_obj, "response");
-	assert (JSON_NODE_HOLDS_ARRAY (tmp_node) );
-	
-	tracks = json_node_get_array (tmp_node);
-	
-	// Fill the store
-	GtkTreeIter iter;
-	gtk_list_store_clear (query->store);
-	
-	json_array_foreach_element (tracks, parse_audio_track, &iter);
-	
-	g_object_unref (parser);
+	gdk_threads_leave ();
 }
 
 void
-vk_search_audio_thread_func (void *ctx) {
-	SeachQuery *query = (SeachQuery *) ctx;
-	GError *error;
-	gchar *resp_str;
-
-	char *method_url = g_strdup_printf (VK_API_METHOD_AUDIO_SEARCH "?access_token=%s&q=%s",
-										vk_auth_data->access_token,
-										query->query);
-	
-	resp_str = http_get_string (method_url, &error);
-	if (NULL == resp_str) {
-	    trace ("VK error: %s\n", error->message);
-	    g_error_free (error);
-	} else {
-	    parse_audio_resp (resp_str);
-	}
-	
-	g_free (method_url);
-
-}
-
-void
-vk_add_track_from_tree_store_to_playlist (GtkTreeIter *iter, ddb_playlist_t *plt) {
+vk_add_track_from_tree_model_to_playlist (GtkTreeModel *treestore, GtkTreeIter *iter) {
 	gchar *artist;
 	gchar *title;
 	int duration;
 	gchar *url;
+	ddb_playlist_t *plt;
 	
-	gtk_tree_model_get (GTK_TREE_MODEL (query->store), iter,
+	gtk_tree_model_get (treestore, iter,
 	                    ARTIST_COLUMN, &artist,
 	                    TITLE_COLUMN, &title,
 	                    DURATION_COLUMN, &duration,
 	                    URL_COLUMN, &url,
 	                    -1);
+	plt = deadbeef->plt_get_curr ();
 	                    
 	DB_playItem_t *pt;
 	int pabort = 0;
@@ -174,25 +98,50 @@ vk_add_track_from_tree_store_to_playlist (GtkTreeIter *iter, ddb_playlist_t *plt
 	}
 	deadbeef->pl_unlock();
 	
-	free (artist);
-	free (title);
-	free (url);
+	deadbeef->plt_unref (plt);
+	g_free (artist);
+	g_free (title);
+	g_free (url);
+}
+
+static void
+vk_search_audio_thread_func (void *ctx) {
+	SeachQuery *query = (SeachQuery *) ctx;
+	GError *error;
+	gchar *resp_str;
+
+	char *method_url = g_strdup_printf (VK_API_METHOD_AUDIO_SEARCH "?access_token=%s&q=%s",
+										vk_auth_data->access_token,
+										query->query);
+
+	resp_str = http_get_string (method_url, &error);
+	if (NULL == resp_str) {
+	    trace ("VK error: %s\n", error->message);
+	    g_error_free (error);
+	} else {
+	    parse_audio_resp (query->store, resp_str);
+	    g_free (resp_str);
+	}
+
+	g_free (method_url);
+	g_free (query->query);
+	g_free (query);
+	http_tid = 0;
 }
 
 void
-vk_search_music (const gchar *query_text, GtkListStore *liststore) {
+vk_search_music (const gchar *query_text, GtkTreeModel *liststore) {
+    SeachQuery *query;
+
     if (http_tid) {
         trace("Killing http thread\n");
         deadbeef->thread_detach (http_tid);
-        free (query->query);
-        free (query);
 
         http_tid = 0;
-        query = NULL;
     }
     trace("== Searching for %s\n", query_text);
 
-    query = malloc (sizeof(SeachQuery));
+    query = g_malloc (sizeof(SeachQuery));
     query->query = g_strdup (query_text);
     query->store = liststore;
 
@@ -240,7 +189,7 @@ vk_config_changed() {
     vk_auth_data = vk_auth_data_parse (auth_data_str);
 }
 
-int
+static int
 vk_ddb_connect() {
 #if GTK_CHECK_VERSION(3,0,0)
 	gtkui_plugin = (ddb_gtkui_t *) deadbeef->plug_get_for_id ("gtkui3");
@@ -290,12 +239,6 @@ vk_ddb_message (uint32_t id, uintptr_t ctx, uint32_t p1, uint32_t p2) {
 static int
 vk_ddb_stop() {
     vk_auth_data_free(vk_auth_data);
-
-    if (query != NULL) {
-        g_free (query->query);
-        // TODO g_free query->store ?
-        g_free (query);
-    }
     return 0;
 }
 

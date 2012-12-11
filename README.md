@@ -4,7 +4,7 @@ DeadBeef plugin for listening musing from vkontakte.com
 
 Features
 --------
-It can only search music across VK.com. Track is added to current playlist by double click.  
+It can only search music across VK.com. Track is added to current playlist by double click or with popup menu.  
 That's it for now.
 
 Installation

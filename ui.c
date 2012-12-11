@@ -8,11 +8,13 @@
 #include <deadbeef/deadbeef.h>
 
 #include "ui.h"
+#include "common-defs.h"
 
-extern DB_functions_t *deadbeef;    // defined in vkontakte.c
 
-void vk_add_track_from_tree_store_to_playlist (GtkTreeIter *iter, ddb_playlist_t *plt);
+// vkontakte.c
+void vk_add_track_from_tree_model_to_playlist (GtkTreeModel *treestore, GtkTreeIter *iter);
 void vk_search_music (const gchar *query_text, GtkListStore *liststore);
+
 
 gboolean
 show_message (GtkMessageType messageType, const gchar *message) {
@@ -22,11 +24,21 @@ show_message (GtkMessageType messageType, const gchar *message) {
                                    GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
                                    messageType,
                                    GTK_BUTTONS_OK,
-                                   "%s",
                                    message);
     g_signal_connect_swapped (dlg, "response", G_CALLBACK (gtk_widget_destroy), dlg);
     gtk_dialog_run (GTK_DIALOG (dlg) );
     return FALSE;
+}
+
+static void
+add_to_playlist (GtkTreeModel *treemodel, GtkTreePath *path) {
+	GtkTreeIter treeiter;
+
+	if (gtk_tree_model_get_iter(treemodel, &treeiter, path)) {
+		vk_add_track_from_tree_model_to_playlist(treemodel, &treeiter);
+	} else {
+		trace("gtk_tree_model_get_iter failed, %s:%d", __FILE__, __LINE__);
+	}
 }
 
 static void
@@ -35,17 +47,10 @@ on_search_results_row_activate (GtkTreeView *tree_view,
                                 GtkTreeViewColumn *column,
                                 gpointer user_data) {
     GtkTreeModel *model;
-    GtkTreeIter iter;
-    ddb_playlist_t *plt;
 
-    model = gtk_tree_view_get_model (tree_view);
-    plt = deadbeef->plt_get_curr();
+	model = gtk_tree_view_get_model(tree_view);
 
-    if (gtk_tree_model_get_iter (model, &iter, path) ) {
-        vk_add_track_from_tree_store_to_playlist (&iter, plt);
-    }
-
-    deadbeef->plt_unref (plt);
+	add_to_playlist(model, path);
 }
 
 static void
@@ -59,19 +64,13 @@ on_menu_item_add_to_playlist(GtkWidget *menuItem, gpointer userdata) {
     selection = gtk_tree_view_get_selection (treeview);
     selected_rows = gtk_tree_selection_get_selected_rows (selection, &treemodel);
 
-    i = g_list_first (selected_rows);
+    i = g_list_last (selected_rows);
     while (i) {
-        GtkTreePath *path;
-        GtkTreeIter treeiter;
-
-        path = (GtkTreePath *) i->data;
-        gtk_tree_model_get_iter(treemodel, &treeiter, path);
-        vk_add_track_from_tree_store_to_playlist (&treeiter, deadbeef->plt_get_curr ());
-
-        i = g_list_next (i);
+        add_to_playlist (treemodel, (GtkTreePath *) i->data);
+        i = g_list_previous (i);
     }
 
-    g_list_free(selected_rows);
+    g_list_free (selected_rows);
 }
 
 static void
@@ -81,14 +80,14 @@ show_popup_menu(GtkTreeView *treeview, GdkEventButton *event) {
     menu = gtk_menu_new ();
 
     item = gtk_menu_item_new_with_label ("Add to playlist");
-    g_signal_connect(item, "activate", G_CALLBACK(on_menu_item_add_to_playlist), treeview);
-    gtk_menu_shell_append (GTK_MENU_SHELL(menu), item);
+    g_signal_connect (item, "activate", G_CALLBACK (on_menu_item_add_to_playlist), treeview);
+    gtk_menu_shell_append (GTK_MENU_SHELL (menu), item);
 
 //    item = gtk_menu_item_new_with_label ("Clear playlist")
 //    gtk_menu_shell_append (GTK_MENU_SHELL(menu), item);
 
     gtk_widget_show_all (menu);
-    gtk_menu_popup (GTK_MENU(menu), NULL, NULL, NULL, NULL, 0,
+    gtk_menu_popup (GTK_MENU (menu), NULL, NULL, NULL, NULL, 0,
                     gdk_event_get_time ((GdkEvent *) event));
 }
 
