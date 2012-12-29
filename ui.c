@@ -14,7 +14,7 @@
 // vkontakte.c
 void vk_add_track_from_tree_model_to_playlist (GtkTreeModel *treestore, GtkTreeIter *iter);
 void vk_search_music (const gchar *query_text, GtkListStore *liststore);
-
+void vk_get_my_music (GtkTreeModel *liststore);
 
 gboolean
 show_message (GtkMessageType messageType, const gchar *message) {
@@ -129,6 +129,15 @@ on_search (GtkWidget *widget, gpointer data) {
     gtk_widget_grab_focus (widget);
 }
 
+static void
+on_my_music (GtkWidget *widget, gpointer *data) {
+    gtk_widget_set_sensitive (widget, FALSE);
+
+    vk_get_my_music (GTK_TREE_MODEL (data));
+
+    gtk_widget_set_sensitive (widget, TRUE);
+}
+
 GtkWidget *
 vk_create_add_tracks_dlg () {
     GtkWidget *dlg;
@@ -140,6 +149,8 @@ vk_create_add_tracks_dlg () {
     GtkCellRenderer *artist_cell;
     GtkCellRenderer *title_cell;
     GtkTreeSelection *selection;
+    GtkWidget *bottom_hbox;
+    GtkWidget *my_music_button;
 
     dlg = gtk_dialog_new ();
     gtk_container_set_border_width (GTK_CONTAINER (dlg), 12);
@@ -195,6 +206,14 @@ vk_create_add_tracks_dlg () {
     scroll_window = gtk_scrolled_window_new (NULL, NULL);
     gtk_container_add (GTK_CONTAINER (scroll_window), search_results);
     gtk_box_pack_start (GTK_BOX (dlg_vbox), scroll_window, TRUE, TRUE, 12);
+
+    bottom_hbox = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 0);
+    gtk_box_pack_start (GTK_BOX (dlg_vbox), bottom_hbox, FALSE, TRUE, 0);
+
+    my_music_button = gtk_button_new_with_label ("My music");
+    g_signal_connect (my_music_button, "clicked", G_CALLBACK (on_my_music), list_store);
+    gtk_box_pack_start (GTK_BOX (bottom_hbox), my_music_button, FALSE, FALSE, 0);
+
     gtk_widget_show_all (dlg);
 
     return dlg;

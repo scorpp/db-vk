@@ -110,7 +110,7 @@ vk_search_audio_thread_func (void *ctx) {
 	GError *error;
 	gchar *resp_str;
 
-	char *method_url = g_strdup_printf (VK_API_METHOD_AUDIO_SEARCH "?access_token=%s&count=%d&&q=%s",
+	char *method_url = g_strdup_printf (VK_API_METHOD_AUDIO_SEARCH "?access_token=%s&count=%d&q=%s",
 										vk_auth_data->access_token,
 										VK_AUDIO_MAX_TRACKS,
 										query->query);
@@ -130,6 +130,28 @@ vk_search_audio_thread_func (void *ctx) {
 	http_tid = 0;
 }
 
+static void
+vk_get_my_music_thread_func (void *ctx) {
+    GError *error;
+    gchar *resp_str;
+
+    char *method_url = g_strdup_printf (VK_API_METHOD_AUDIO_GET "?access_token=%s&count=%d",
+                                        vk_auth_data->access_token,
+                                        VK_AUDIO_MAX_TRACKS);
+
+    resp_str = http_get_string (method_url, &error);
+    if (NULL == resp_str) {
+        trace ("VK error: %s\n", error->message);
+        g_error_free (error);
+    } else {
+        parse_audio_resp (GTK_TREE_MODEL (ctx), resp_str);
+        g_free (resp_str);
+    }
+
+    g_free (method_url);
+    http_tid = 0;
+}
+
 void
 vk_search_music (const gchar *query_text, GtkTreeModel *liststore) {
     SeachQuery *query;
@@ -147,6 +169,19 @@ vk_search_music (const gchar *query_text, GtkTreeModel *liststore) {
     query->store = liststore;
 
     http_tid = deadbeef->thread_start (vk_search_audio_thread_func, query);
+}
+
+void
+vk_get_my_music (GtkTreeModel *liststore) {
+    if (http_tid) {
+        trace("Killing http thread\n");
+        deadbeef->thread_detach (http_tid);
+
+        http_tid = 0;
+    }
+    trace("== Getting my music, uid=%d\n", vk_auth_data->user_id);
+
+    http_tid = deadbeef->thread_start (vk_get_my_music_thread_func, liststore);
 }
 
 static gboolean
