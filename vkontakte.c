@@ -110,8 +110,9 @@ vk_search_audio_thread_func (void *ctx) {
 	GError *error;
 	gchar *resp_str;
 
-	char *method_url = g_strdup_printf (VK_API_METHOD_AUDIO_SEARCH "?access_token=%s&q=%s",
+	char *method_url = g_strdup_printf (VK_API_METHOD_AUDIO_SEARCH "?access_token=%s&count=%d&&q=%s",
 										vk_auth_data->access_token,
+										VK_AUDIO_MAX_TRACKS,
 										query->query);
 
 	resp_str = http_get_string (method_url, &error);
@@ -156,8 +157,8 @@ vk_action_gtk (void *data) {
 		// not authenticated, show warning and that's it
 		gdk_threads_enter();
 		show_message (GTK_MESSAGE_WARNING,
-		              "To be able to use VKontakte plugin you need to provide "
-		              "your authentication details. Please visit plugin configuration. "
+		              "To be able to use VKontakte plugin you need to provide your\n"
+		              "authentication details. Please visit plugin configuration.\n"
 		              "Then you will be able to add tracks from VK.com");
 		gdk_threads_leave();
 		return FALSE;

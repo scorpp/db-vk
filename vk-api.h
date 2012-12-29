@@ -24,6 +24,7 @@ typedef struct {
 } VkAuthData;
 
 
+#define VK_AUDIO_MAX_TRACKS 200
 typedef struct {
     int aid;
     int owner_id;
