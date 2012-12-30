@@ -28,5 +28,5 @@ Restart Deadbeeef player for it to load the plugin, now check out `File` menu
 
 Packages
 --------
-[Arch Linux AUR] (https://aur.archlinux.org/packages/deadbeef-plugin-vk/)
+[Arch Linux AUR] (https://aur.archlinux.org/packages/deadbeef-plugin-vk/)  
 [Ubuntu 12.10] (https://docs.google.com/folder/d/0B6EJOKa6vq1kbmd1cjJXZzNjbUU/edit) pick latest one
