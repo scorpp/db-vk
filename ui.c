@@ -24,6 +24,7 @@ show_message (GtkMessageType messageType, const gchar *message) {
                                    GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
                                    messageType,
                                    GTK_BUTTONS_OK,
+                                   "%s",
                                    message);
     g_signal_connect_swapped (dlg, "response", G_CALLBACK (gtk_widget_destroy), dlg);
     gtk_dialog_run (GTK_DIALOG (dlg) );
@@ -207,7 +208,7 @@ vk_create_add_tracks_dlg () {
     gtk_container_add (GTK_CONTAINER (scroll_window), search_results);
     gtk_box_pack_start (GTK_BOX (dlg_vbox), scroll_window, TRUE, TRUE, 12);
 
-    bottom_hbox = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 0);
+    bottom_hbox = gtk_hbox_new (FALSE, 12);
     gtk_box_pack_start (GTK_BOX (dlg_vbox), bottom_hbox, FALSE, TRUE, 0);
 
     my_music_button = gtk_button_new_with_label ("My music");
