@@ -4,7 +4,7 @@ DeadBeef plugin for listening musing from vkontakte.com
 
 Features
 --------
-It can only search music across VK.com. Track is added to current playlist by double click or with popup menu.  
+It can search music across VK.com or display 'My Music'. Track is added to current playlist by double click or with popup menu.  
 That's it for now.
 
 Installation
@@ -29,3 +29,4 @@ Restart Deadbeeef player for it to load the plugin, now check out `File` menu
 Packages
 --------
 [Arch Linux AUR] (https://aur.archlinux.org/packages/deadbeef-plugin-vk/)
+[Ubuntu 12.10] (https://docs.google.com/folder/d/0B6EJOKa6vq1kbmd1cjJXZzNjbUU/edit) pick latest one
