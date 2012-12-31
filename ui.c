@@ -152,6 +152,7 @@ vk_create_add_tracks_dlg () {
     GtkTreeSelection *selection;
     GtkWidget *bottom_hbox;
     GtkWidget *my_music_button;
+    int col_i;
 
     dlg = gtk_dialog_new ();
     gtk_container_set_border_width (GTK_CONTAINER (dlg), 12);
@@ -183,15 +184,17 @@ vk_create_add_tracks_dlg () {
                                                  title_cell, "text", TITLE_COLUMN, NULL );
     gtk_tree_view_insert_column_with_attributes (GTK_TREE_VIEW (search_results), -1, "Duration",
                                                  duration_cell, "text", DURATION_COLUMN, NULL );
-    // allow column resize
+    // allow column resize & sort
     GList *columns;
     GList *i;
     columns = gtk_tree_view_get_columns (GTK_TREE_VIEW (search_results) );
     i = g_list_first (columns);
+    col_i = 0;
     while (i) {
         GtkTreeViewColumn *col;
         col = GTK_TREE_VIEW_COLUMN (i->data);
         gtk_tree_view_column_set_resizable (col, TRUE);
+        gtk_tree_view_column_set_sort_column_id (col, col_i++);
 
         i = g_list_next (i);
     }

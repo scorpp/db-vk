@@ -12,7 +12,7 @@
  * List view columns.
  */
 enum {
-    ARTIST_COLUMN,
+    ARTIST_COLUMN = 0,
     TITLE_COLUMN,
     DURATION_COLUMN,
     URL_COLUMN,
