@@ -288,7 +288,11 @@ DB_misc_t plugin = {
 	.plugin.type = DB_PLUGIN_MISC,
 	.plugin.version_major = 1,
 	.plugin.version_minor = 0,
-	.plugin.id = "vkontakte",
+#if GTK_CHECK_VERSION(3,0,0)
+	.plugin.id = "vkontakte_3",
+#else
+	.plugin.id = "vkontakte_2",
+#endif
 	.plugin.name = "VKontakte",
 	.plugin.descr = "Play music from VKontakte social network site.\n",
 	.plugin.copyright =
@@ -301,8 +305,16 @@ DB_misc_t plugin = {
 	.plugin.get_actions = vk_ddb_getactions,
 };
 
+#if GTK_CHECK_VERSION(3,0,0)
 DB_plugin_t *
-vkontakte_load (DB_functions_t *api) {
-	deadbeef = api;
-	return &plugin.plugin;
+vkontakte_gtk3_load (DB_functions_t *api) {
+    deadbeef = api;
+    return DB_PLUGIN (&plugin);
 }
+#else
+DB_plugin_t *
+vkontakte_gtk2_load (DB_functions_t *api) {
+	deadbeef = api;
+	return DB_PLUGIN (&plugin);
+}
+#endif

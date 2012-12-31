@@ -1,40 +1,49 @@
 project(DB_VK)
 cmake_minimum_required(VERSION 2.6)
 
-option(USE_GTK2 "Use GTK2 instead of default GTK3" OFF)
+# Build both by default
+option(WITH_GTK2 "Build GTK2 version" ON)
+option(WITH_GTK3 "Build GTK3 version" ON)
 
+find_package(CURL REQUIRED)
 find_package(PkgConfig REQUIRED)
-
-if (USE_GTK2)
-	pkg_check_modules(GTK REQUIRED gtk+-2.0)
-else (USE_GTK2)
-	pkg_check_modules(GTK REQUIRED gtk+-3.0)
-endif (USE_GTK2)
-
-include_directories(${GTK_INCLUDE_DIRS})
-link_directories(${GTK_LIBRARY_DIRS})
-add_definitions(${GTK_CFLAGS_OTHER})
-
 
 pkg_check_modules(JSON_GLIB REQUIRED json-glib-1.0)
 include_directories(${JSON_GLIB_INCLUDE_DIRS})
 link_directories(${JSON_GLIB_LIBRARY_DIRS})
 add_definitions(${JSON_GLIB_CFLAGS_OTHER})
 
-find_package(CURL REQUIRED)
-
 include_directories(${DB_VK_SOURCE_DIR})
 
 set(CMAKE_C_FLAGS "-g -Wall")
 
-add_library(vkontakte SHARED vkontakte.c vk-api.c ui.c util.c)
-target_link_libraries(vkontakte ${GTK_LIBRARIES} ${CURL_LIBRARIES} ${JSON_GLIB_LIBRARIES})
-set_target_properties(vkontakte PROPERTIES PREFIX "")
+if (WITH_GTK2)
+	pkg_check_modules(GTK2 REQUIRED gtk+-2.0)
+	add_library(vkontakte_gtk2 SHARED vkontakte.c vk-api.c ui.c util.c)
+	target_link_libraries(vkontakte_gtk2 ${GTK2_LIBRARIES} ${CURL_LIBRARIES} ${JSON_GLIB_LIBRARIES})
+	
+	# Preserve common include dirs and add GTK2 includes only to this target
+	get_target_property(VK_GTK2_INCLUDE_DIRS vkontakte_gtk2 INCLUDE_DIRECTORIES)
+	set_target_properties(vkontakte_gtk2 PROPERTIES INCLUDE_DIRECTORIES "${VK_GTK2_INCLUDE_DIRS};${GTK2_INCLUDE_DIRS}")
+	
+	set_target_properties(vkontakte_gtk2 PROPERTIES PREFIX "")
+	install(TARGETS vkontakte_gtk2 DESTINATION "lib/deadbeef")
+endif ()
+
+if (WITH_GTK3)
+	pkg_check_modules(GTK3 REQUIRED gtk+-3.0)
+	add_library(vkontakte_gtk3 SHARED vkontakte.c vk-api.c ui.c util.c)
+	target_link_libraries(vkontakte_gtk3 ${GTK3_LIBRARIES} ${CURL_LIBRARIES} ${JSON_GLIB_LIBRARIES})
+	
+	# Preserve common include dirs and add GTK3 includes only to this target
+	get_target_property(VK_GTK3_INCLUDE_DIRS vkontakte_gtk3 INCLUDE_DIRECTORIES)
+	set_target_properties(vkontakte_gtk3 PROPERTIES INCLUDE_DIRECTORIES "${VK_GTK3_INCLUDE_DIRS};${GTK3_INCLUDE_DIRS}")
+	
+	set_target_properties(vkontakte_gtk3 PROPERTIES PREFIX "")
+	install(TARGETS vkontakte_gtk3 DESTINATION "lib/deadbeef")
+endif ()
 
 
 # Configure packaging
 set(CPACK_PROJECT_CONFIG_FILE ${PROJECT_SOURCE_DIR}/CMakeCPackOptions.cmake) 
-
-install(TARGETS vkontakte DESTINATION "lib/deadbeef")
-
 include(CPack)
