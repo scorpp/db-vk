@@ -22,7 +22,7 @@ Build it with
     make
 and copy `vkontakte.so` to `~/.local/lib/deadbeef` like this:
     
-    mkdir -p ~/.local/lib/deabeef
+    mkdir -p ~/.local/lib/deadbeef
     cp vkontakte.so ~/.local/lib/deadbeef/
 Restart Deadbeeef player for it to load the plugin, now check out `File` menu
 
