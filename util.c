@@ -2,9 +2,10 @@
  * util.c
  *
  *  Created on: Dec 9, 2012
- *      Author: scorp
+ *  Author: scorp
  */
 #include <curl/curl.h>
+#include <glib.h>
 
 #include "common-defs.h"
 

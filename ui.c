@@ -2,13 +2,14 @@
  * ui.c
  *
  *  Created on: Dec 9, 2012
- *      Author: scorp
+ *  Author: scorp
  */
 #include <gtk/gtk.h>
 #include <deadbeef/deadbeef.h>
 
 #include "ui.h"
 #include "common-defs.h"
+#include "gtk_compat.h"
 
 
 // vkontakte.c
