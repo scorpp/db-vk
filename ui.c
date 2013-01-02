@@ -155,11 +155,9 @@ vk_create_add_tracks_dlg () {
     GtkListStore *list_store;
     GtkCellRenderer *artist_cell;
     GtkCellRenderer *title_cell;
-    GtkTreeSelection *selection;
     GtkWidget *bottom_hbox;
     GtkWidget *my_music_button;
     GtkWidget *filter_duplicates;
-    int col_i;
 
     dlg = gtk_dialog_new ();
     gtk_container_set_border_width (GTK_CONTAINER (dlg), 12);
@@ -173,6 +171,7 @@ vk_create_add_tracks_dlg () {
                                      G_TYPE_STRING,     // ARTIST
                                      G_TYPE_STRING,     // TITLE
                                      G_TYPE_INT,        // DURATION seconds, not rendered
+                                     G_TYPE_STRING,     // DURATION_FORMATTED
                                      G_TYPE_STRING );   // URL, not rendered
 
     search_text = gtk_entry_new ();
@@ -181,34 +180,39 @@ vk_create_add_tracks_dlg () {
     g_signal_connect(search_text, "activate", G_CALLBACK (on_search), list_store);
 
     GtkCellRenderer *duration_cell;
-    search_results = gtk_tree_view_new_with_model (GTK_TREE_MODEL (list_store) );
+    search_results = gtk_tree_view_new_with_model (GTK_TREE_MODEL (list_store));
     artist_cell = gtk_cell_renderer_text_new ();
     title_cell = gtk_cell_renderer_text_new ();
     duration_cell = gtk_cell_renderer_text_new ();
     gtk_tree_view_insert_column_with_attributes (GTK_TREE_VIEW (search_results), -1, "Artist",
-                                                 artist_cell, "text", ARTIST_COLUMN, NULL );
+                                                 artist_cell, "text", ARTIST_COLUMN, NULL);
     gtk_tree_view_insert_column_with_attributes (GTK_TREE_VIEW (search_results), -1, "Title",
-                                                 title_cell, "text", TITLE_COLUMN, NULL );
+                                                 title_cell, "text", TITLE_COLUMN, NULL);
     gtk_tree_view_insert_column_with_attributes (GTK_TREE_VIEW (search_results), -1, "Duration",
-                                                 duration_cell, "text", DURATION_COLUMN, NULL );
-    // allow column resize & sort
-    GList *columns;
-    GList *i;
-    columns = gtk_tree_view_get_columns (GTK_TREE_VIEW (search_results) );
-    i = g_list_first (columns);
-    col_i = 0;
-    while (i) {
-        GtkTreeViewColumn *col;
-        col = GTK_TREE_VIEW_COLUMN (i->data);
-        gtk_tree_view_column_set_resizable (col, TRUE);
-        gtk_tree_view_column_set_sort_column_id (col, col_i++);
+                                                 duration_cell, "text", DURATION_FORMATTED_COLUMN, NULL);
 
-        i = g_list_next (i);
-    }
-    g_list_free (columns);
+    //// Setup columns
+    GtkTreeViewColumn *col;
+    // artist col is resizeable and sortable
+    col = gtk_tree_view_get_column (GTK_TREE_VIEW (search_results), 0);
+    gtk_tree_view_column_set_resizable (col, TRUE);
+    gtk_tree_view_column_set_sort_column_id (col, 0);
+    // title col is resizeable, sortable and expanded
+    col = gtk_tree_view_get_column (GTK_TREE_VIEW (search_results), 1);
+    gtk_tree_view_column_set_resizable (col, TRUE);
+    gtk_tree_view_column_set_expand (col, TRUE);
+    gtk_tree_view_column_set_sort_column_id (col, 1);
+    // duration col is sortable and fixed width
+    col = gtk_tree_view_get_column (GTK_TREE_VIEW (search_results), 2);
+    gtk_tree_view_column_set_min_width(col, 10);
+    gtk_tree_view_column_set_max_width(col, 70);
+    gtk_tree_view_column_set_fixed_width (col, 50);
+    gtk_tree_view_column_set_sizing (col, GTK_TREE_VIEW_COLUMN_FIXED);
+    gtk_tree_view_column_set_sort_column_id (col, 2);
 
-    selection = gtk_tree_view_get_selection (GTK_TREE_VIEW (search_results));
-    gtk_tree_selection_set_mode (selection, GTK_SELECTION_MULTIPLE);
+
+    gtk_tree_selection_set_mode (gtk_tree_view_get_selection (GTK_TREE_VIEW (search_results)),
+                                 GTK_SELECTION_MULTIPLE);
 
     g_signal_connect(search_results, "row-activated", G_CALLBACK (on_search_results_row_activate), NULL);
     g_signal_connect(search_results, "popup-menu", G_CALLBACK(on_search_results_popup_menu), NULL);
@@ -218,7 +222,7 @@ vk_create_add_tracks_dlg () {
     gtk_container_add (GTK_CONTAINER (scroll_window), search_results);
     gtk_box_pack_start (GTK_BOX (dlg_vbox), scroll_window, TRUE, TRUE, 12);
 
-    bottom_hbox = gtk_hbox_new (FALSE, 12);
+    bottom_hbox = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 12);
     gtk_box_pack_start (GTK_BOX (dlg_vbox), bottom_hbox, FALSE, TRUE, 0);
 
     my_music_button = gtk_button_new_with_label ("My music");
@@ -234,4 +238,3 @@ vk_create_add_tracks_dlg () {
     gtk_widget_show_all (dlg);
     return dlg;
 }
-

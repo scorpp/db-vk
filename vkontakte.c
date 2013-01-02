@@ -99,14 +99,20 @@ parse_audio_track_callback (VkAudioTrack *track, guint index, gpointer userdata)
 
 	if (!vk_search_opts.filter_duplicates
 	        || !vk_tree_model_has_track (treestore, track)) {
+	    gchar *duration_formatted;
+
+	    duration_formatted = g_strdup_printf ("%d:%02d", track->duration / 60, track->duration % 60);
+
         // write to list store
         gtk_list_store_append(GTK_LIST_STORE (treestore), &iter);
         gtk_list_store_set (GTK_LIST_STORE (treestore), &iter,
                             ARTIST_COLUMN, track->artist,
                             TITLE_COLUMN, track->title,
                             DURATION_COLUMN, track->duration,
+                            DURATION_FORMATTED_COLUMN, duration_formatted,
                             URL_COLUMN, track->url,
                             -1);
+        g_free (duration_formatted);
 	}
 }
 
