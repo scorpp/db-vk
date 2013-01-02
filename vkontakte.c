@@ -36,6 +36,59 @@ typedef struct {
 // util.c
 gchar *     http_get_string(const gchar *url, GError **error);
 
+/**
+ * Simple deduplication.
+ * @return true if given track already exists, false otherwise.
+ */
+gboolean
+vk_tree_model_has_track (GtkTreeModel *treemodel, VkAudioTrack *track) {
+    gboolean has_track;
+    GtkTreeIter iter;
+    gboolean valid;
+    gchar *track_artist_casefolded;
+    gchar *track_title_casefolded;
+
+    has_track = FALSE;
+
+    track_artist_casefolded = g_utf8_casefold (track->artist, -1);
+    track_title_casefolded = g_utf8_casefold (track->title, -1);
+
+    valid = gtk_tree_model_get_iter_first (treemodel, &iter);
+    while (valid && !has_track) {
+        gchar *model_artist;
+        gchar *model_title;
+        gchar *model_artist_casefolded;
+        gchar *model_title_casefolded;
+        gint model_duration;
+
+        gtk_tree_model_get (treemodel, &iter,
+                            ARTIST_COLUMN, &model_artist,
+                            TITLE_COLUMN, &model_title,
+                            DURATION_COLUMN, &model_duration,
+                            -1);
+        model_artist_casefolded = g_utf8_casefold (model_artist, -1);
+        model_title_casefolded = g_utf8_casefold (model_title, -1);
+
+        if (0 == g_utf8_collate (model_artist_casefolded, track_artist_casefolded)
+                && 0 == g_utf8_collate (model_title_casefolded, track_title_casefolded)) {
+            has_track = TRUE;
+            trace ("Duplicate %s - %s, duration existing %d vs %d\n", track->artist, track->title,
+                   model_duration, track->duration);
+        }
+
+        g_free (model_artist);
+        g_free (model_title);
+        g_free (model_artist_casefolded);
+        g_free (model_title_casefolded);
+
+        valid = gtk_tree_model_iter_next (treemodel, &iter);
+    }
+
+    g_free (track_artist_casefolded);
+    g_free (track_title_casefolded);
+
+    return has_track;
+}
 
 static void
 parse_audio_track_callback (VkAudioTrack *track, guint index, gpointer userdata) {
@@ -44,14 +97,17 @@ parse_audio_track_callback (VkAudioTrack *track, guint index, gpointer userdata)
 
 	treestore = GTK_TREE_MODEL (userdata);
 
-	// write to list store
-	gtk_list_store_append(GTK_LIST_STORE (treestore), &iter);
-	gtk_list_store_set (GTK_LIST_STORE (treestore), &iter,
-	                    ARTIST_COLUMN, track->artist,
-	                    TITLE_COLUMN, track->title,
-	                    DURATION_COLUMN, track->duration,
-	                    URL_COLUMN, track->url,
-	                    -1);
+	if (!vk_search_opts.filter_duplicates
+	        || !vk_tree_model_has_track (treestore, track)) {
+        // write to list store
+        gtk_list_store_append(GTK_LIST_STORE (treestore), &iter);
+        gtk_list_store_set (GTK_LIST_STORE (treestore), &iter,
+                            ARTIST_COLUMN, track->artist,
+                            TITLE_COLUMN, track->title,
+                            DURATION_COLUMN, track->duration,
+                            URL_COLUMN, track->url,
+                            -1);
+	}
 }
 
 static void
@@ -237,6 +293,9 @@ vk_ddb_connect() {
 		return -1;
 	}
 	
+	// set default UI options
+    vk_search_opts.filter_duplicates = TRUE;
+
 	return 0;
 }
 

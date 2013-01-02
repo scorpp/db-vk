@@ -140,6 +140,11 @@ on_my_music (GtkWidget *widget, gpointer *data) {
     gtk_widget_set_sensitive (widget, TRUE);
 }
 
+static void
+on_filter_duplicates (GtkWidget *widget, gpointer *data) {
+    vk_search_opts.filter_duplicates = gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON (widget));
+}
+
 GtkWidget *
 vk_create_add_tracks_dlg () {
     GtkWidget *dlg;
@@ -153,6 +158,7 @@ vk_create_add_tracks_dlg () {
     GtkTreeSelection *selection;
     GtkWidget *bottom_hbox;
     GtkWidget *my_music_button;
+    GtkWidget *filter_duplicates;
     int col_i;
 
     dlg = gtk_dialog_new ();
@@ -219,8 +225,13 @@ vk_create_add_tracks_dlg () {
     g_signal_connect (my_music_button, "clicked", G_CALLBACK (on_my_music), list_store);
     gtk_box_pack_start (GTK_BOX (bottom_hbox), my_music_button, FALSE, FALSE, 0);
 
-    gtk_widget_show_all (dlg);
+    filter_duplicates = gtk_check_button_new_with_label ("Filter duplicates");
+    gtk_widget_set_tooltip_text (filter_duplicates, "When checked removes duplicates during next search");
+    gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (filter_duplicates), vk_search_opts.filter_duplicates);
+    g_signal_connect (filter_duplicates, "clicked", G_CALLBACK (on_filter_duplicates), list_store);
+    gtk_box_pack_start (GTK_BOX (bottom_hbox), filter_duplicates, FALSE, FALSE, 0);
 
+    gtk_widget_show_all (dlg);
     return dlg;
 }
 

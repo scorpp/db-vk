@@ -12,3 +12,4 @@
 *.a
 /Debug
 /build
+/gtk-2.12
