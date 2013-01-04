@@ -182,6 +182,11 @@ on_filter_duplicates (GtkWidget *widget, gpointer *data) {
     vk_search_opts.filter_duplicates = gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON (widget));
 }
 
+static void
+on_whole_phrase_search (GtkWidget *widget, gpointer *data) {
+    vk_search_opts.search_whole_phrase = gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON (widget));
+}
+
 GtkWidget *
 vk_create_add_tracks_dlg () {
     GtkWidget *dlg;
@@ -195,6 +200,7 @@ vk_create_add_tracks_dlg () {
     GtkWidget *bottom_hbox;
     GtkWidget *my_music_button;
     GtkWidget *filter_duplicates;
+    GtkWidget *search_whole_phrase;
 
     dlg = gtk_dialog_new ();
     gtk_container_set_border_width (GTK_CONTAINER (dlg), 12);
@@ -271,6 +277,12 @@ vk_create_add_tracks_dlg () {
     gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (filter_duplicates), vk_search_opts.filter_duplicates);
     g_signal_connect (filter_duplicates, "clicked", G_CALLBACK (on_filter_duplicates), list_store);
     gtk_box_pack_start (GTK_BOX (bottom_hbox), filter_duplicates, FALSE, FALSE, 0);
+
+    search_whole_phrase = gtk_check_button_new_with_label ("Whole phrase");
+    gtk_widget_set_tooltip_text (search_whole_phrase, "Searching 'foo bar' would match exactly what you typed and not just 'foo' or 'bar'");
+    gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (search_whole_phrase), vk_search_opts.filter_duplicates);
+    g_signal_connect (search_whole_phrase, "clicked", G_CALLBACK (on_whole_phrase_search), list_store);
+    gtk_box_pack_start (GTK_BOX (bottom_hbox), search_whole_phrase, FALSE, FALSE, 0);
 
     gtk_widget_show_all (dlg);
     return dlg;

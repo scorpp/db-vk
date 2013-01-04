@@ -5,6 +5,7 @@
 #include <deadbeef/deadbeef.h>
 #include <deadbeef/gtkui_api.h>
 #include <json-glib/json-glib.h>
+#include <string.h>
 
 #include "common-defs.h"
 #include "vk-api.h"
@@ -20,7 +21,7 @@ static intptr_t http_tid;	// thread for communication
 typedef struct {
     gchar *query;
     GtkTreeModel *store;
-} SeachQuery;
+} SearchQuery;
 
 #define VK_AUTH_APP_ID "3035566"
 #define VK_AUTH_REDIR_URL "http://scorpspot.blogspot.com/p/vk-id.html"
@@ -42,6 +43,11 @@ gchar *     http_get_string(const gchar *url, GError **error);
  */
 gboolean
 vk_tree_model_has_track (GtkTreeModel *treemodel, VkAudioTrack *track) {
+    // if no need to filter duplicates return FALSE immediately
+    if (!vk_search_opts.filter_duplicates) {
+        return FALSE;
+    }
+
     gboolean has_track;
     GtkTreeIter iter;
     gboolean valid;
@@ -90,22 +96,44 @@ vk_tree_model_has_track (GtkTreeModel *treemodel, VkAudioTrack *track) {
     return has_track;
 }
 
+static gboolean
+vk_search_filter_matches (const gchar *search_query, VkAudioTrack *track) {
+    // 'My music' doesn't use search query, don't filter it
+    if (!vk_search_opts.search_whole_phrase
+            || search_query == NULL) {
+        return TRUE;
+    }
+
+    gchar *query_casefolded = g_utf8_casefold (search_query, -1);
+    gchar *title_casefolded = g_utf8_casefold (track->title, -1);
+    gchar *artist_casefolded = g_utf8_casefold (track->artist, -1);
+
+    gboolean matches = strstr(title_casefolded, query_casefolded) != 0
+            || strstr(artist_casefolded, query_casefolded) != 0;
+
+    g_free (artist_casefolded);
+    g_free (title_casefolded);
+    g_free (query_casefolded);
+
+    return matches;
+}
+
 static void
 parse_audio_track_callback (VkAudioTrack *track, guint index, gpointer userdata) {
-	GtkTreeModel *treestore;
+    SearchQuery *query;
 	GtkTreeIter iter;
 
-	treestore = GTK_TREE_MODEL (userdata);
+	query = (SearchQuery *) userdata;
 
-	if (!vk_search_opts.filter_duplicates
-	        || !vk_tree_model_has_track (treestore, track)) {
+	if (vk_search_filter_matches (query->query, track)
+	        && !vk_tree_model_has_track (query->store, track)) {
 	    gchar *duration_formatted;
 
 	    duration_formatted = g_strdup_printf ("%d:%02d", track->duration / 60, track->duration % 60);
 
         // write to list store
-        gtk_list_store_append(GTK_LIST_STORE (treestore), &iter);
-        gtk_list_store_set (GTK_LIST_STORE (treestore), &iter,
+        gtk_list_store_append(GTK_LIST_STORE (query->store), &iter);
+        gtk_list_store_set (GTK_LIST_STORE (query->store), &iter,
                             ARTIST_COLUMN, track->artist,
                             TITLE_COLUMN, track->title,
                             DURATION_COLUMN, track->duration,
@@ -117,13 +145,13 @@ parse_audio_track_callback (VkAudioTrack *track, guint index, gpointer userdata)
 }
 
 static void
-parse_audio_resp (GtkTreeModel *treestore, const gchar *resp_str) {
+parse_audio_resp (SearchQuery *query, const gchar *resp_str) {
 	GError *error;
 
 	gdk_threads_enter ();
-	gtk_list_store_clear (GTK_LIST_STORE (treestore));
+	gtk_list_store_clear (GTK_LIST_STORE (query->store));
 
-	if (!vk_audio_response_parse (resp_str, parse_audio_track_callback, treestore, &error)) {
+	if (!vk_audio_response_parse (resp_str, parse_audio_track_callback, query, &error)) {
 		show_message(GTK_MESSAGE_ERROR, error->message);
 		g_error_free (error);
 	}
@@ -168,7 +196,7 @@ vk_add_track_from_tree_model_to_playlist (GtkTreeModel *treestore, GtkTreeIter *
 
 static void
 vk_search_audio_thread_func (void *ctx) {
-	SeachQuery *query = (SeachQuery *) ctx;
+	SearchQuery *query = (SearchQuery *) ctx;
 	GError *error;
 	gchar *resp_str;
 
@@ -182,7 +210,7 @@ vk_search_audio_thread_func (void *ctx) {
 	    trace ("VK error: %s\n", error->message);
 	    g_error_free (error);
 	} else {
-	    parse_audio_resp (query->store, resp_str);
+	    parse_audio_resp (query, resp_str);
 	    g_free (resp_str);
 	}
 
@@ -206,7 +234,11 @@ vk_get_my_music_thread_func (void *ctx) {
         trace ("VK error: %s\n", error->message);
         g_error_free (error);
     } else {
-        parse_audio_resp (GTK_TREE_MODEL (ctx), resp_str);
+        SearchQuery query;
+        query.query = NULL,
+        query.store = GTK_TREE_MODEL (ctx);
+
+        parse_audio_resp (&query, resp_str);
         g_free (resp_str);
     }
 
@@ -216,7 +248,7 @@ vk_get_my_music_thread_func (void *ctx) {
 
 void
 vk_search_music (const gchar *query_text, GtkTreeModel *liststore) {
-    SeachQuery *query;
+    SearchQuery *query;
 
     if (http_tid) {
         trace("Killing http thread\n");
@@ -226,7 +258,7 @@ vk_search_music (const gchar *query_text, GtkTreeModel *liststore) {
     }
     trace("== Searching for %s\n", query_text);
 
-    query = g_malloc (sizeof(SeachQuery));
+    query = g_malloc (sizeof(SearchQuery));
     query->query = g_strdup (query_text);
     query->store = liststore;
 
@@ -301,6 +333,7 @@ vk_ddb_connect() {
 	
 	// set default UI options
     vk_search_opts.filter_duplicates = TRUE;
+    vk_search_opts.search_whole_phrase = TRUE;
 
 	return 0;
 }

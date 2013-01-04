@@ -26,6 +26,7 @@ enum {
 
 struct {
     gboolean filter_duplicates;
+    gboolean search_whole_phrase;
 } vk_search_opts;
 
 
