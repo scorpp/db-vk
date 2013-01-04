@@ -56,7 +56,7 @@ on_search_results_row_activate (GtkTreeView *tree_view,
 }
 
 static void
-on_menu_item_add_to_playlist(GtkWidget *menuItem, gpointer userdata) {
+on_menu_item_add_to_playlist (GtkWidget *menuItem, gpointer userdata) {
     GtkTreeView *treeview;
     GtkTreeSelection *selection;
     GtkTreeModel *treemodel;
@@ -76,7 +76,43 @@ on_menu_item_add_to_playlist(GtkWidget *menuItem, gpointer userdata) {
 }
 
 static void
-show_popup_menu(GtkTreeView *treeview, GdkEventButton *event) {
+on_menu_item_copy_url (GtkWidget *menuItem, gpointer userdata) {
+    GtkTreeView *treeview;
+    GtkTreeSelection *selection;
+    GtkTreeModel *treemodel;
+    GtkTreeIter iter;
+    GList *selected_rows, *i;
+    GString *urls_buf;
+
+    urls_buf = g_string_sized_new(500);
+
+    treeview = GTK_TREE_VIEW (userdata);
+    selection = gtk_tree_view_get_selection (treeview);
+    selected_rows = gtk_tree_selection_get_selected_rows (selection, &treemodel);
+
+    i = g_list_first (selected_rows);
+    while (i) {
+        gchar *track_url;
+
+        gtk_tree_model_get_iter (treemodel, &iter, (GtkTreePath *) i->data);
+        gtk_tree_model_get (treemodel, &iter,
+                            URL_COLUMN, &track_url,
+                            -1);
+        g_string_append (urls_buf, track_url);
+        g_string_append (urls_buf, "\n");
+        g_free (track_url);
+
+        i = g_list_next (i);
+    }
+
+    gtk_clipboard_set_text (gtk_clipboard_get (GDK_SELECTION_CLIPBOARD), urls_buf->str, urls_buf->len);
+
+    g_list_free (selected_rows);
+    g_string_free(urls_buf, TRUE);
+}
+
+static void
+show_popup_menu (GtkTreeView *treeview, GdkEventButton *event) {
     GtkWidget *menu, *item;
 
     menu = gtk_menu_new ();
@@ -85,8 +121,9 @@ show_popup_menu(GtkTreeView *treeview, GdkEventButton *event) {
     g_signal_connect (item, "activate", G_CALLBACK (on_menu_item_add_to_playlist), treeview);
     gtk_menu_shell_append (GTK_MENU_SHELL (menu), item);
 
-//    item = gtk_menu_item_new_with_label ("Clear playlist")
-//    gtk_menu_shell_append (GTK_MENU_SHELL(menu), item);
+    item = gtk_menu_item_new_with_label ("Copy URL(s)");
+    g_signal_connect (item, "activate", G_CALLBACK (on_menu_item_copy_url), treeview);
+    gtk_menu_shell_append (GTK_MENU_SHELL(menu), item);
 
     gtk_widget_show_all (menu);
     gtk_menu_popup (GTK_MENU (menu), NULL, NULL, NULL, NULL, 0,
