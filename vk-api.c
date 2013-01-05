@@ -40,7 +40,7 @@ vk_auth_data_parse (const gchar *auth_data_str) {
         trace ("VK auth data missing");
         return NULL ;
     }
-    VkAuthData *vk_auth_data;
+    VkAuthData *vk_auth_data = NULL;
     GError *error;
     JsonParser *parser = json_parser_new ();
 
@@ -48,15 +48,17 @@ vk_auth_data_parse (const gchar *auth_data_str) {
         trace ("VK auth data invalid");
         g_free (error);
         g_object_unref (parser);
+        return NULL;
     }
 
-    assert (JSON_NODE_HOLDS_OBJECT (json_parser_get_root (parser)));
-    JsonObject *root = json_node_get_object (json_parser_get_root (parser));
+    if (JSON_NODE_HOLDS_OBJECT (json_parser_get_root (parser))) {
+        JsonObject *root = json_node_get_object (json_parser_get_root (parser));
 
-    vk_auth_data = g_malloc (sizeof *vk_auth_data);
-    vk_auth_data->access_token = g_strdup (json_object_get_string_member (root, "access_token"));
-    vk_auth_data->user_id = json_object_get_int_member (root, "user_id");
-    vk_auth_data->expires_in = json_object_get_int_member (root, "expires_in");
+        vk_auth_data = g_malloc (sizeof *vk_auth_data);
+        vk_auth_data->access_token = g_strdup (json_object_get_string_member (root, "access_token"));
+        vk_auth_data->user_id = json_object_get_int_member (root, "user_id");
+        vk_auth_data->expires_in = json_object_get_int_member (root, "expires_in");
+    }
 
     g_object_unref (parser);
     return vk_auth_data;
@@ -64,7 +66,7 @@ vk_auth_data_parse (const gchar *auth_data_str) {
 
 void
 vk_auth_data_free (VkAuthData *vk_auth_data) {
-    if (vk_auth_data != NULL ) {
+    if (vk_auth_data != NULL) {
         g_free ((gchar *) vk_auth_data->access_token);
         g_free (vk_auth_data);
     }
