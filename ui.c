@@ -12,10 +12,14 @@
 #include "gtk_compat.h"
 
 
+const gchar *last_search_query = NULL;
+
+
 // vkontakte.c
 void vk_add_track_from_tree_model_to_playlist (GtkTreeModel *treestore, GtkTreeIter *iter);
 void vk_search_music (const gchar *query_text, GtkListStore *liststore);
 void vk_get_my_music (GtkTreeModel *liststore);
+void vk_ddb_set_config_var (const char *key, GValue *value);
 
 gboolean
 show_message (GtkMessageType messageType, const gchar *message) {
@@ -30,6 +34,39 @@ show_message (GtkMessageType messageType, const gchar *message) {
     g_signal_connect_swapped (dlg, "response", G_CALLBACK (gtk_widget_destroy), dlg);
     gtk_dialog_run (GTK_DIALOG (dlg) );
     return FALSE;
+}
+
+/**
+ * Handler for various search-affecting controls that would trigger search again if needed.
+ */
+static void
+maybe_do_search_again (GtkWidget *widget, gpointer data) {
+    if (last_search_query == NULL) {
+        return;
+    }
+
+    const gchar *current_query = gtk_entry_get_text (GTK_ENTRY (data));
+
+    if (g_strcmp0(last_search_query, current_query) == 0) {
+        // if search query wasn't changed, emit search to refresh results
+        g_signal_emit_by_name (data, "activate");
+    }
+}
+
+static void
+save_active_property_value_to_config (GtkWidget *widget, gpointer data) {
+    GValue value = G_VALUE_INIT;
+
+    if (GTK_IS_COMBO_BOX (widget)) {
+        g_value_init (&value, G_TYPE_INT);
+    } else if (GTK_IS_CHECK_BUTTON (widget)) {
+        g_value_init (&value, G_TYPE_BOOLEAN);
+    } else {
+        trace ("FATAL: %s unsupported widget type\n", __FUNCTION__);
+    }
+
+    g_object_get_property (G_OBJECT (widget), "active", &value);
+    vk_ddb_set_config_var ((const gchar *) data, &value);
 }
 
 static void
@@ -161,7 +198,15 @@ static void
 on_search (GtkWidget *widget, gpointer data) {
     gtk_widget_set_sensitive (widget, FALSE);
 
-    const gchar *query_text = gtk_entry_get_text (GTK_ENTRY (widget) );
+    const gchar *query_text = gtk_entry_get_text (GTK_ENTRY (widget));
+
+    // refresh last search query
+    if (last_search_query != NULL) {
+        g_free ((gchar*) last_search_query);
+    }
+    last_search_query = g_strdup (query_text);
+
+    gtk_list_store_clear (GTK_LIST_STORE (data));
     vk_search_music (query_text, GTK_LIST_STORE (data));
 
     gtk_widget_set_sensitive (widget, TRUE);
@@ -172,6 +217,8 @@ static void
 on_my_music (GtkWidget *widget, gpointer *data) {
     gtk_widget_set_sensitive (widget, FALSE);
 
+    last_search_query = NULL;
+    gtk_list_store_clear (GTK_LIST_STORE (data));
     vk_get_my_music (GTK_TREE_MODEL (data));
 
     gtk_widget_set_sensitive (widget, TRUE);
@@ -187,12 +234,19 @@ on_whole_phrase_search (GtkWidget *widget, gpointer *data) {
     vk_search_opts.search_whole_phrase = gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON (widget));
 }
 
+static void
+on_search_target_changed (GtkWidget *widget, gpointer *data) {
+    vk_search_opts.search_target = gtk_combo_box_get_active( GTK_COMBO_BOX (widget));
+}
+
 GtkWidget *
 vk_create_add_tracks_dlg () {
     GtkWidget *dlg;
     GtkWidget *dlg_vbox;
     GtkWidget *scroll_window;
+    GtkWidget *search_hbox;
     GtkWidget *search_text;
+    GtkWidget *search_target;
     GtkWidget *search_results;
     GtkListStore *list_store;
     GtkCellRenderer *artist_cell;
@@ -217,10 +271,22 @@ vk_create_add_tracks_dlg () {
                                      G_TYPE_STRING,     // DURATION_FORMATTED
                                      G_TYPE_STRING );   // URL, not rendered
 
+    search_hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
+    gtk_box_pack_start (GTK_BOX (dlg_vbox), search_hbox, FALSE, FALSE, 0);
+
     search_text = gtk_entry_new ();
-    gtk_box_pack_start (GTK_BOX (dlg_vbox), search_text, FALSE, FALSE, 0);
     gtk_widget_show (search_text);
     g_signal_connect(search_text, "activate", G_CALLBACK (on_search), list_store);
+    gtk_box_pack_start (GTK_BOX (search_hbox), search_text, TRUE, TRUE, 0);
+
+    search_target = gtk_combo_box_text_new ();
+    // must to order of VkSearchTarget entries
+    gtk_combo_box_text_append_text (GTK_COMBO_BOX_TEXT (search_target), "Anywhere");
+    gtk_combo_box_text_append_text (GTK_COMBO_BOX_TEXT (search_target), "Artist");
+    gtk_combo_box_text_append_text (GTK_COMBO_BOX_TEXT (search_target), "Title");
+    gtk_combo_box_set_active (GTK_COMBO_BOX (search_target), vk_search_opts.search_target);
+    g_signal_connect (search_target, "changed", G_CALLBACK (on_search_target_changed), NULL);
+    gtk_box_pack_start (GTK_BOX (search_hbox), search_target, FALSE, FALSE, 0);
 
     GtkCellRenderer *duration_cell;
     search_results = gtk_tree_view_new_with_model (GTK_TREE_MODEL (list_store));
@@ -279,10 +345,23 @@ vk_create_add_tracks_dlg () {
     gtk_box_pack_start (GTK_BOX (bottom_hbox), filter_duplicates, FALSE, FALSE, 0);
 
     search_whole_phrase = gtk_check_button_new_with_label ("Whole phrase");
-    gtk_widget_set_tooltip_text (search_whole_phrase, "Searching 'foo bar' would match exactly what you typed and not just 'foo' or 'bar'");
-    gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (search_whole_phrase), vk_search_opts.filter_duplicates);
+    gtk_widget_set_tooltip_text (search_whole_phrase,
+                                 "Searching 'foo bar' would match exactly what you typed and not just 'foo' or 'bar'");
+    gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (search_whole_phrase), vk_search_opts.search_whole_phrase);
     g_signal_connect (search_whole_phrase, "clicked", G_CALLBACK (on_whole_phrase_search), list_store);
     gtk_box_pack_start (GTK_BOX (bottom_hbox), search_whole_phrase, FALSE, FALSE, 0);
+
+    // refresh results when search criteria changed
+    g_signal_connect (search_target, "changed", G_CALLBACK (maybe_do_search_again), search_text);
+    g_signal_connect (filter_duplicates, "clicked", G_CALLBACK (maybe_do_search_again), search_text);
+    g_signal_connect (search_whole_phrase, "clicked", G_CALLBACK (maybe_do_search_again), search_text);
+    // save controls state to config
+    g_signal_connect (search_target, "changed",
+                      G_CALLBACK (save_active_property_value_to_config), CONF_VK_UI_TARGET);
+    g_signal_connect (filter_duplicates, "clicked",
+                      G_CALLBACK (save_active_property_value_to_config), CONF_VK_UI_DEDUP);
+    g_signal_connect (search_whole_phrase, "clicked",
+                      G_CALLBACK (save_active_property_value_to_config), CONF_VK_UI_WHOLE_PHRASE);
 
     gtk_widget_show_all (dlg);
     return dlg;

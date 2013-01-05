@@ -19,7 +19,7 @@ static VkAuthData *vk_auth_data = NULL;
 static intptr_t http_tid;	// thread for communication
 
 typedef struct {
-    gchar *query;
+    const gchar *query;
     GtkTreeModel *store;
 } SearchQuery;
 
@@ -39,7 +39,7 @@ gchar *     http_get_string(const gchar *url, GError **error);
 
 /**
  * Simple deduplication.
- * @return true if given track already exists, false otherwise.
+ * @return TRUE if given track already exists, FALSE otherwise.
  */
 gboolean
 vk_tree_model_has_track (GtkTreeModel *treemodel, VkAudioTrack *track) {
@@ -96,6 +96,10 @@ vk_tree_model_has_track (GtkTreeModel *treemodel, VkAudioTrack *track) {
     return has_track;
 }
 
+/**
+ * Apply additional filters.
+ * @return TRUE if track matches additional filters, FALSE otherwise.
+ */
 static gboolean
 vk_search_filter_matches (const gchar *search_query, VkAudioTrack *track) {
     // 'My music' doesn't use search query, don't filter it
@@ -108,14 +112,24 @@ vk_search_filter_matches (const gchar *search_query, VkAudioTrack *track) {
     gchar *title_casefolded = g_utf8_casefold (track->title, -1);
     gchar *artist_casefolded = g_utf8_casefold (track->artist, -1);
 
-    gboolean matches = strstr(title_casefolded, query_casefolded) != 0
-            || strstr(artist_casefolded, query_casefolded) != 0;
+    gboolean artist_matches = strstr (artist_casefolded, query_casefolded) != 0;
+    gboolean title_matches = strstr (title_casefolded, query_casefolded) != 0;
 
     g_free (artist_casefolded);
     g_free (title_casefolded);
     g_free (query_casefolded);
 
-    return matches;
+    switch (vk_search_opts.search_target) {
+    case VK_TARGET_ANY_FIELD:
+        return artist_matches || title_matches;
+    case VK_TARGET_ARTIST_FIELD:
+        return artist_matches;
+    case VK_TARGET_TITLE_FIELD:
+        return title_matches;
+    default:
+        trace ("WARN: unexpected VkSearchTraget value: %d\n", vk_search_opts.search_target);
+        return TRUE;
+    }
 }
 
 static void
@@ -149,8 +163,6 @@ parse_audio_resp (SearchQuery *query, const gchar *resp_str) {
 	GError *error;
 
 	gdk_threads_enter ();
-	gtk_list_store_clear (GTK_LIST_STORE (query->store));
-
 	if (!vk_audio_response_parse (resp_str, parse_audio_track_callback, query, &error)) {
 		show_message(GTK_MESSAGE_ERROR, error->message);
 		g_error_free (error);
@@ -195,55 +207,67 @@ vk_add_track_from_tree_model_to_playlist (GtkTreeModel *treestore, GtkTreeIter *
 }
 
 static void
+vk_send_audio_request_and_parse_response (const gchar *url, SearchQuery *query) {
+    GError *error;
+    gchar *resp_str;
+
+    resp_str = http_get_string (url, &error);
+    if (NULL == resp_str) {
+        trace ("VK error: %s\n", error->message);
+        g_error_free (error);
+    } else {
+        parse_audio_resp (query, resp_str);
+        g_free (resp_str);
+    }
+}
+
+static void
 vk_search_audio_thread_func (void *ctx) {
 	SearchQuery *query = (SearchQuery *) ctx;
-	GError *error;
-	gchar *resp_str;
 
 	char *method_url = g_strdup_printf (VK_API_METHOD_AUDIO_SEARCH "?access_token=%s&count=%d&q=%s",
 										vk_auth_data->access_token,
 										VK_AUDIO_MAX_TRACKS,
 										query->query);
-
-	resp_str = http_get_string (method_url, &error);
-	if (NULL == resp_str) {
-	    trace ("VK error: %s\n", error->message);
-	    g_error_free (error);
-	} else {
-	    parse_audio_resp (query, resp_str);
-	    g_free (resp_str);
-	}
+	vk_send_audio_request_and_parse_response (method_url, query);
 
 	g_free (method_url);
-	g_free (query->query);
+	g_free ((gchar *) query->query);
 	g_free (query);
 	http_tid = 0;
 }
 
 static void
 vk_get_my_music_thread_func (void *ctx) {
-    GError *error;
-    gchar *resp_str;
+    SearchQuery query;
+
+    query.query = NULL,
+    query.store = GTK_TREE_MODEL (ctx);
 
     char *method_url = g_strdup_printf (VK_API_METHOD_AUDIO_GET "?access_token=%s&count=%d",
                                         vk_auth_data->access_token,
                                         VK_AUDIO_MAX_TRACKS);
-
-    resp_str = http_get_string (method_url, &error);
-    if (NULL == resp_str) {
-        trace ("VK error: %s\n", error->message);
-        g_error_free (error);
-    } else {
-        SearchQuery query;
-        query.query = NULL,
-        query.store = GTK_TREE_MODEL (ctx);
-
-        parse_audio_resp (&query, resp_str);
-        g_free (resp_str);
-    }
+    vk_send_audio_request_and_parse_response (method_url, &query);
 
     g_free (method_url);
     http_tid = 0;
+}
+
+void
+vk_ddb_set_config_var (const char *key, GValue *value) {
+    if (G_VALUE_HOLDS_INT (value)) {
+        deadbeef->conf_set_int (key, g_value_get_int (value));
+    } else if (G_VALUE_HOLDS_INT64 (value)) {
+        deadbeef->conf_set_int64 (key, g_value_get_int64 (value));
+    } else if (G_VALUE_HOLDS_FLOAT (value)) {
+        deadbeef->conf_set_float (key, g_value_get_float (value));
+    } else if (G_VALUE_HOLDS_STRING (value)) {
+        deadbeef->conf_set_str (key, g_value_get_string (value));
+    } else if (G_VALUE_HOLDS_BOOLEAN (value)) {
+        deadbeef->conf_set_int (key, g_value_get_boolean (value) ? 1 : 0);
+    } else {
+        trace ("WARN unsupported GType to vk_ddb_set_config_var: %s\n", G_VALUE_TYPE_NAME (value));
+    }
 }
 
 void
@@ -332,8 +356,9 @@ vk_ddb_connect() {
 	}
 	
 	// set default UI options
-    vk_search_opts.filter_duplicates = TRUE;
-    vk_search_opts.search_whole_phrase = TRUE;
+    vk_search_opts.filter_duplicates = (1 == deadbeef->conf_get_int (CONF_VK_UI_DEDUP, 1));
+    vk_search_opts.search_whole_phrase = (1 == deadbeef->conf_get_int (CONF_VK_UI_WHOLE_PHRASE, 1));
+    vk_search_opts.search_target = deadbeef->conf_get_int (CONF_VK_UI_TARGET, VK_TARGET_ANY_FIELD);
 
 	return 0;
 }
@@ -384,8 +409,8 @@ DB_misc_t plugin = {
 	.plugin.api_vmajor = 1,
 	.plugin.api_vminor = 0,
 	.plugin.type = DB_PLUGIN_MISC,
-	.plugin.version_major = 1,
-	.plugin.version_minor = 0,
+	.plugin.version_major = 0,
+	.plugin.version_minor = 1,
 #if GTK_CHECK_VERSION(3,0,0)
 	.plugin.id = "vkontakte_3",
 #else

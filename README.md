@@ -4,7 +4,14 @@ DeadBeef plugin for listening musing from vkontakte.com
 
 Features
 --------
-It can search music across VK.com or display 'My Music'. Track is added to current playlist by double click or with popup menu.  
+  * Retrieve 'My Music' contents
+  * Search VK.com for music
+  * Removes duplicates in search results
+  * Narrows search to specific phrase (in contrast to default behaviour which matches any single word from search query)
+  * Allow searching in artist name or track title only
+  * Copy track(s) URL to clipboard (for later download or whatever)
+
+Track(s) can be added to current playlist by double click or with popup menu.  
 That's it for now.
 
 Installation
@@ -20,10 +27,10 @@ Build it with
 
     cmake .
     make
-and copy `vkontakte.so` to `~/.local/lib/deadbeef` like this:
+and copy `vkontakte_gtk*.so` to `~/.local/lib/deadbeef` like this:
     
     mkdir -p ~/.local/lib/deadbeef
-    cp vkontakte.so ~/.local/lib/deadbeef/
+    cp vkontakte_gtk*.so ~/.local/lib/deadbeef/
 Restart Deadbeeef player for it to load the plugin, now check out `File` menu
 
 Packages

@@ -10,6 +10,7 @@
 
 #include <glib.h>
 
+G_BEGIN_DECLS
 
 /**
  * List view columns.
@@ -23,14 +24,25 @@ enum {
     N_COLUMNS
 };
 
+typedef enum {
+    VK_TARGET_ANY_FIELD = 0,
+    VK_TARGET_ARTIST_FIELD,
+    VK_TARGET_TITLE_FIELD
+} VkSearchTarget;
 
 struct {
     gboolean filter_duplicates;
     gboolean search_whole_phrase;
+    VkSearchTarget search_target;
 } vk_search_opts;
+
+#define CONF_VK_UI_DEDUP "vk.ui.filter.duplicates"
+#define CONF_VK_UI_WHOLE_PHRASE "vk.ui.whole.phrase"
+#define CONF_VK_UI_TARGET "vk.uk.target"
 
 
 gboolean        show_message (GtkMessageType messageType, const gchar *message);
 GtkWidget *     vk_create_add_tracks_dlg ();
 
+G_END_DECLS
 #endif /* UI_H_ */
