@@ -26,7 +26,7 @@ typedef struct {
 #define VK_AUTH_APP_ID "3035566"
 #define VK_AUTH_REDIR_URL "http://scorpspot.blogspot.com/p/vk-id.html"
 #define VK_AUTH_URL "http://oauth.vkontakte.ru/authorize?client_id=" VK_AUTH_APP_ID \
-		"&scope=audio,friends&redirect_uri=" VK_AUTH_REDIR_URL \
+		"&scope=audio,friends,offline&redirect_uri=" VK_AUTH_REDIR_URL \
 		"&response_type=token"
 
 
