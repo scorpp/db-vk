@@ -6,6 +6,7 @@
  */
 #include <gtk/gtk.h>
 #include <deadbeef/deadbeef.h>
+#include <string.h>
 
 #include "ui.h"
 #include "common-defs.h"
@@ -47,7 +48,8 @@ maybe_do_search_again (GtkWidget *widget, gpointer data) {
 
     const gchar *current_query = gtk_entry_get_text (GTK_ENTRY (data));
 
-    if (g_strcmp0(last_search_query, current_query) == 0) {
+    // don't care about encodings - if it's the same string there would be zero
+    if (strcmp (last_search_query, current_query) == 0) {
         // if search query wasn't changed, emit search to refresh results
         g_signal_emit_by_name (data, "activate");
     }
