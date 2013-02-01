@@ -26,7 +26,7 @@ if (WITH_GTK2)
 	link_directories(${GTK2_LIBRARY_DIRS})
 	
 	set_target_properties(vkontakte_gtk2 PROPERTIES PREFIX "")
-	install(TARGETS vkontakte_gtk2 DESTINATION "lib/deadbeef")
+	install(TARGETS vkontakte_gtk2 DESTINATION "lib${LIB_SUFFIX}/deadbeef")
 endif ()
 
 if (WITH_GTK3)
@@ -38,7 +38,7 @@ if (WITH_GTK3)
 	link_directories(${GTK2_LIBRARY_DIRS})
 	
 	set_target_properties(vkontakte_gtk3 PROPERTIES PREFIX "")
-	install(TARGETS vkontakte_gtk3 DESTINATION "lib/deadbeef")
+	install(TARGETS vkontakte_gtk3 DESTINATION "lib${LIB_SUFFIX}/deadbeef")
 endif ()
 
 
