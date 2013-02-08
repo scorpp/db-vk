@@ -22,8 +22,10 @@ if (WITH_GTK2)
 	add_library(vkontakte_gtk2 SHARED vkontakte.c vk-api.c ui.c util.c)
 	target_link_libraries(vkontakte_gtk2 ${GTK2_LIBRARIES} ${CURL_LIBRARIES} ${JSON_GLIB_LIBRARIES})
 	
-	include_directories(${GTK2_INCLUDE_DIRS})
-	link_directories(${GTK2_LIBRARY_DIRS})
+	get_target_property(VK_GTK2_INCLUDE_DIRS vkontakte_gtk2 INCLUDE_DIRECTORIES)
+	set_target_properties(vkontakte_gtk2 PROPERTIES INCLUDE_DIRECTORIES "${VK_GTK2_INCLUDE_DIRS};${GTK2_INCLUDE_DIRS}")
+
+        link_directories(${GTK2_LIBRARY_DIRS})
 	
 	set_target_properties(vkontakte_gtk2 PROPERTIES PREFIX "")
 	install(TARGETS vkontakte_gtk2 DESTINATION "lib${LIB_SUFFIX}/deadbeef")
@@ -33,8 +35,10 @@ if (WITH_GTK3)
 	pkg_check_modules(GTK3 REQUIRED gtk+-3.0)
 	add_library(vkontakte_gtk3 SHARED vkontakte.c vk-api.c ui.c util.c)
 	target_link_libraries(vkontakte_gtk3 ${GTK3_LIBRARIES} ${CURL_LIBRARIES} ${JSON_GLIB_LIBRARIES})
-	
-	include_directories(${GTK2_INCLUDE_DIRS})
+        
+        get_target_property(VK_GTK3_INCLUDE_DIRS vkontakte_gtk3 INCLUDE_DIRECTORIES)
+	set_target_properties(vkontakte_gtk3 PROPERTIES INCLUDE_DIRECTORIES "${VK_GTK3_INCLUDE_DIRS};${GTK3_INCLUDE_DIRS}") 
+
 	link_directories(${GTK2_LIBRARY_DIRS})
 	
 	set_target_properties(vkontakte_gtk3 PROPERTIES PREFIX "")
