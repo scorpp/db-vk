@@ -6,6 +6,7 @@
 #include <deadbeef/gtkui_api.h>
 #include <json-glib/json-glib.h>
 #include <string.h>
+#include <curl/curl.h>
 
 #include "common-defs.h"
 #include "vk-api.h"
@@ -224,14 +225,20 @@ vk_send_audio_request_and_parse_response (const gchar *url, SearchQuery *query) 
 static void
 vk_search_audio_thread_func (void *ctx) {
 	SearchQuery *query = (SearchQuery *) ctx;
+	CURL *curl;
 
+	curl = curl_easy_init ();
+
+	char *escaped_search_str = curl_easy_escape (curl, query->query, 0);
 	char *method_url = g_strdup_printf (VK_API_METHOD_AUDIO_SEARCH "?access_token=%s&count=%d&q=%s",
 										vk_auth_data->access_token,
 										VK_AUDIO_MAX_TRACKS,
-										query->query);
+										escaped_search_str);
 	vk_send_audio_request_and_parse_response (method_url, query);
 
 	g_free (method_url);
+	g_free (escaped_search_str);
+	curl_easy_cleanup (curl);
 	g_free ((gchar *) query->query);
 	g_free (query);
 	http_tid = 0;
