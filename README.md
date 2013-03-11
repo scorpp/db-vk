@@ -36,7 +36,8 @@ Restart Deadbeeef player for it to load the plugin, now check out `File` menu
 Packages
 --------
 [Arch Linux (AUR)] (https://aur.archlinux.org/packages/deadbeef-plugin-vk/)  
-[Ubuntu 12.10 (GTK2 only build)] (https://docs.google.com/folder/d/0B6EJOKa6vq1kbmd1cjJXZzNjbUU/edit) pick latest one. (Reported to work fine on Debian stable as well.) Package installs to /opt/deadbeef/ prefix as official Deadbeef package does. If you have a thirdparty package installed you may need to copy\symlink .so's to ~/.local/lib/deadbeef/ or /usr/lib/deadbeef/
+[Ubuntu 12.10 (GTK2 only build)] (https://docs.google.com/folder/d/0B6EJOKa6vq1kbmd1cjJXZzNjbUU/edit) pick latest one. (Reported to work fine on Debian stable as well.) Package installs to /opt/deadbeef/ prefix as official Deadbeef package does. If you have a thirdparty package installed you may need to copy\symlink .so's to ~/.local/lib/deadbeef/ or /usr/lib/deadbeef/  
+[Gentoo] (https://github.com/megabaks/stuff/tree/master/media-sound/deadbeef-vk) (appreciations to @megabaks)
 
 Contacts
 --------
