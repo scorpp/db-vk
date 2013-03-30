@@ -105,10 +105,10 @@ on_menu_item_add_to_playlist (GtkWidget *menuItem, gpointer userdata) {
     selection = gtk_tree_view_get_selection (treeview);
     selected_rows = gtk_tree_selection_get_selected_rows (selection, &treemodel);
 
-    i = g_list_last (selected_rows);
+    i = g_list_first (selected_rows);
     while (i) {
         add_to_playlist (treemodel, (GtkTreePath *) i->data);
-        i = g_list_previous (i);
+        i = g_list_next (i);
     }
 
     g_list_free (selected_rows);

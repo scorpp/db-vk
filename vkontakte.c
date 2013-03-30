@@ -191,8 +191,9 @@ vk_add_track_from_tree_model_to_playlist (GtkTreeModel *treestore, GtkTreeIter *
 	int pabort = 0;
 	
 	deadbeef->pl_lock();
-	if (!deadbeef->pl_add_files_begin (plt) ) {
-		pt = deadbeef->plt_insert_file (plt, NULL, url, &pabort, NULL, NULL);
+	if (!deadbeef->pl_add_files_begin (plt)) {
+	    DB_playItem_t *last = deadbeef->plt_get_last (plt, 0);
+		pt = deadbeef->plt_insert_file (plt, last, url, &pabort, NULL, NULL);
 		deadbeef->pl_add_meta (pt, "artist", artist);
 		deadbeef->pl_add_meta (pt, "title", title);
 		deadbeef->plt_set_item_duration (plt, pt, duration);
@@ -226,17 +227,26 @@ static void
 vk_search_audio_thread_func (void *ctx) {
 	SearchQuery *query = (SearchQuery *) ctx;
 	CURL *curl;
+	gchar *method_url;
+	gint rows_added;
+	gint iteration = 0;
 
 	curl = curl_easy_init ();
 
 	char *escaped_search_str = curl_easy_escape (curl, query->query, 0);
-	char *method_url = g_strdup_printf (VK_API_METHOD_AUDIO_SEARCH "?access_token=%s&count=%d&q=%s",
-										vk_auth_data->access_token,
-										VK_AUDIO_MAX_TRACKS,
-										escaped_search_str);
-	vk_send_audio_request_and_parse_response (method_url, query);
 
-	g_free (method_url);
+	do {
+	    rows_added = gtk_tree_model_iter_n_children (query->store, NULL);
+	    method_url = g_strdup_printf (VK_API_METHOD_AUDIO_SEARCH "?access_token=%s&count=%d&offset=%d&q=%s",
+                                            vk_auth_data->access_token,
+                                            VK_AUDIO_MAX_TRACKS,
+                                            VK_AUDIO_MAX_TRACKS * iteration,
+                                            escaped_search_str);
+        vk_send_audio_request_and_parse_response (method_url, query);
+        rows_added = gtk_tree_model_iter_n_children (query->store, NULL) - rows_added;
+        g_free (method_url);
+	} while (++iteration < 10 && rows_added > 0);
+
 	g_free (escaped_search_str);
 	curl_easy_cleanup (curl);
 	g_free ((gchar *) query->query);
