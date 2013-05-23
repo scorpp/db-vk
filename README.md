@@ -42,6 +42,7 @@ Packages
 Contacts
 --------
   * Found a bug or have a problem? Raise an issue here! (This method is appreciated)
+  * Don't have a github account? Comment on <a href="http://vk.com/club53784333" target="_blank">VK group</a>
   * <a href="http://vk.com/scorpp" target="_blank">Me on vk.com</a>
   * <a href="http://gplus.to/scorpp" target="_blank">Me on Google+</a>
   * Email & GTalk: keryascorpio [at] gmail.com
