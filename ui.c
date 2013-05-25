@@ -55,6 +55,31 @@ maybe_do_search_again (GtkWidget *widget, gpointer data) {
     }
 }
 
+/**
+ * Opens file choose dialog and returns selected directory path
+ * if user confirmed selection. NULL otherwise.
+ *
+ * @return Directory path or NULL. Free with g_free()
+ */
+gchar *
+open_directory_selection_dialog () {
+    GtkWidget *dlg;
+
+    dlg = gtk_file_chooser_dialog_new("Save to",
+                                      NULL,
+                                      GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER,
+                                      GTK_STOCK_CANCEL, GTK_RESPONSE_CANCEL,
+                                      GTK_STOCK_OPEN, GTK_RESPONSE_OK,
+                                      NULL);
+    if (gtk_dialog_run (GTK_DIALOG (dlg)) == GTK_RESPONSE_OK) {
+        gtk_widget_destroy (dlg);
+        return gtk_file_chooser_get_filename (GTK_FILE_CHOOSER (dlg));
+    } else {
+        gtk_widget_destroy (dlg);
+        return NULL;
+    }
+}
+
 static void
 save_active_property_value_to_config (GtkWidget *widget, gpointer data) {
     GValue value = G_VALUE_INIT;
@@ -151,6 +176,27 @@ on_menu_item_copy_url (GtkWidget *menuItem, gpointer userdata) {
 }
 
 static void
+on_menu_item_download (GtkWidget *menuItem, gpointer userdata) {
+    open_directory_selection_dialog ();
+    /*GtkTreeView *treeview;
+    GtkTreeSelection *selection;
+    GtkTreeModel *treemodel;
+    GList *selected_rows, *i;
+
+    treeview = GTK_TREE_VIEW (userdata);
+    selection = gtk_tree_view_get_selection (treeview);
+    selected_rows = gtk_tree_selection_get_selected_rows (selection, &treemodel);
+
+    i = g_list_first (selected_rows);
+    while (i) {
+        add_to_playlist (treemodel, (GtkTreePath *) i->data);
+        i = g_list_next (i);
+    }
+
+    g_list_free (selected_rows);*/
+}
+
+static void
 show_popup_menu (GtkTreeView *treeview, GdkEventButton *event) {
     GtkWidget *menu, *item;
 
@@ -163,6 +209,10 @@ show_popup_menu (GtkTreeView *treeview, GdkEventButton *event) {
     item = gtk_menu_item_new_with_label ("Copy URL(s)");
     g_signal_connect (item, "activate", G_CALLBACK (on_menu_item_copy_url), treeview);
     gtk_menu_shell_append (GTK_MENU_SHELL(menu), item);
+
+    item = gtk_menu_item_new_with_label ("Download track(s)");
+    g_signal_connect (item, "activate", G_CALLBACK (on_menu_item_download), treeview);
+    gtk_menu_shell_append (GTK_MENU_SHELL (menu), item);
 
     gtk_widget_show_all (menu);
     gtk_menu_popup (GTK_MENU (menu), NULL, NULL, NULL, NULL, 0,
