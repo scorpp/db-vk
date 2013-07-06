@@ -299,7 +299,7 @@ vk_search_music (const gchar *query_text, GtkTreeModel *liststore) {
     }
     trace("== Searching for %s\n", query_text);
 
-    query = g_malloc (sizeof(SearchQuery));
+    query = g_malloc (sizeof (SearchQuery));
     query->query = g_strdup (query_text);
     query->store = liststore;
 

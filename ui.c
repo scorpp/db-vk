@@ -15,6 +15,13 @@
 
 const gchar *last_search_query = NULL;
 
+typedef void (*TreeSelectionIterCallback) (GtkTreeModel*, GtkTreePath*, gpointer user_data);
+
+typedef struct {
+    gchar *url;
+    gchar *filename;
+} DownloadTrack;
+
 
 // vkontakte.c
 void vk_add_track_from_tree_model_to_playlist (GtkTreeModel *treestore, GtkTreeIter *iter);
@@ -65,12 +72,12 @@ gchar *
 open_directory_selection_dialog () {
     GtkWidget *dlg;
 
-    dlg = gtk_file_chooser_dialog_new("Save to",
-                                      NULL,
-                                      GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER,
-                                      GTK_STOCK_CANCEL, GTK_RESPONSE_CANCEL,
-                                      GTK_STOCK_OPEN, GTK_RESPONSE_OK,
-                                      NULL);
+    dlg = gtk_file_chooser_dialog_new ("Save to",
+                                       NULL,
+                                       GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER,
+                                       GTK_STOCK_CANCEL, GTK_RESPONSE_CANCEL,
+                                       GTK_STOCK_OPEN, GTK_RESPONSE_OK,
+                                       NULL);
     if (gtk_dialog_run (GTK_DIALOG (dlg)) == GTK_RESPONSE_OK) {
         gtk_widget_destroy (dlg);
         return gtk_file_chooser_get_filename (GTK_FILE_CHOOSER (dlg));
@@ -97,11 +104,28 @@ save_active_property_value_to_config (GtkWidget *widget, gpointer data) {
 }
 
 static void
-add_to_playlist (GtkTreeModel *treemodel, GtkTreePath *path) {
+tree_view_foreach_selected (GtkTreeView *tree_view, TreeSelectionIterCallback callback, gpointer user_data) {
+    GtkTreeSelection *selection;
+    GtkTreeModel *tree_model;
+    GList *selected_rows, *i;
+
+    selection = gtk_tree_view_get_selection (tree_view);
+    selected_rows = gtk_tree_selection_get_selected_rows (selection, &tree_model);
+
+    i = g_list_first (selected_rows);
+    while (i) {
+        callback (tree_model, (GtkTreePath *) i->data, user_data);
+        i = g_list_next (i);
+    }
+    g_list_free (selected_rows);
+}
+
+static void
+add_to_playlist (GtkTreeModel *tree_model, GtkTreePath *path, gpointer user_data) {
 	GtkTreeIter treeiter;
 
-	if (gtk_tree_model_get_iter(treemodel, &treeiter, path)) {
-		vk_add_track_from_tree_model_to_playlist(treemodel, &treeiter);
+	if (gtk_tree_model_get_iter(tree_model, &treeiter, path)) {
+		vk_add_track_from_tree_model_to_playlist(tree_model, &treeiter);
 	} else {
 		trace("gtk_tree_model_get_iter failed, %s:%d", __FILE__, __LINE__);
 	}
@@ -116,84 +140,92 @@ on_search_results_row_activate (GtkTreeView *tree_view,
 
 	model = gtk_tree_view_get_model(tree_view);
 
-	add_to_playlist(model, path);
+	add_to_playlist(model, path, NULL);
 }
 
 static void
 on_menu_item_add_to_playlist (GtkWidget *menuItem, gpointer userdata) {
-    GtkTreeView *treeview;
-    GtkTreeSelection *selection;
-    GtkTreeModel *treemodel;
-    GList *selected_rows, *i;
-
-    treeview = GTK_TREE_VIEW (userdata);
-    selection = gtk_tree_view_get_selection (treeview);
-    selected_rows = gtk_tree_selection_get_selected_rows (selection, &treemodel);
-
-    i = g_list_first (selected_rows);
-    while (i) {
-        add_to_playlist (treemodel, (GtkTreePath *) i->data);
-        i = g_list_next (i);
-    }
-
-    g_list_free (selected_rows);
+    tree_view_foreach_selected (GTK_TREE_VIEW (userdata), add_to_playlist, NULL);
 }
 
 static void
-on_menu_item_copy_url (GtkWidget *menuItem, gpointer userdata) {
-    GtkTreeView *treeview;
-    GtkTreeSelection *selection;
-    GtkTreeModel *treemodel;
+append_track_url_to_buffer (GtkTreeModel *tree_model, GtkTreePath *tree_path, gpointer user_data) {
     GtkTreeIter iter;
-    GList *selected_rows, *i;
+    GString *urls_buf;
+    gchar *track_url;
+
+    urls_buf = (GString*) user_data;
+    gtk_tree_model_get_iter (tree_model, &iter, tree_path);
+    gtk_tree_model_get (tree_model, &iter,
+                        URL_COLUMN, &track_url,
+                        -1);
+    g_string_append (urls_buf, track_url);
+    g_string_append (urls_buf, "\n");
+    g_free (track_url);
+}
+
+static void
+on_menu_item_copy_url (GtkWidget *menuItem, gpointer user_data) {
     GString *urls_buf;
 
     urls_buf = g_string_sized_new(500);
-
-    treeview = GTK_TREE_VIEW (userdata);
-    selection = gtk_tree_view_get_selection (treeview);
-    selected_rows = gtk_tree_selection_get_selected_rows (selection, &treemodel);
-
-    i = g_list_first (selected_rows);
-    while (i) {
-        gchar *track_url;
-
-        gtk_tree_model_get_iter (treemodel, &iter, (GtkTreePath *) i->data);
-        gtk_tree_model_get (treemodel, &iter,
-                            URL_COLUMN, &track_url,
-                            -1);
-        g_string_append (urls_buf, track_url);
-        g_string_append (urls_buf, "\n");
-        g_free (track_url);
-
-        i = g_list_next (i);
-    }
+    tree_view_foreach_selected(GTK_TREE_VIEW (user_data), append_track_url_to_buffer, urls_buf);
 
     gtk_clipboard_set_text (gtk_clipboard_get (GDK_SELECTION_CLIPBOARD), urls_buf->str, urls_buf->len);
 
-    g_list_free (selected_rows);
     g_string_free(urls_buf, TRUE);
 }
 
 static void
-on_menu_item_download (GtkWidget *menuItem, gpointer userdata) {
-    open_directory_selection_dialog ();
-    /*GtkTreeView *treeview;
-    GtkTreeSelection *selection;
-    GtkTreeModel *treemodel;
-    GList *selected_rows, *i;
+append_download_track (GtkTreeModel *tree_model, GtkTreePath *tree_path, gpointer user_data) {
+    GtkTreeIter iter;
+    DownloadTrack *dl_track;
+    GList** dl_list;
+    gchar *artist_name, *track_title;
 
-    treeview = GTK_TREE_VIEW (userdata);
-    selection = gtk_tree_view_get_selection (treeview);
-    selected_rows = gtk_tree_selection_get_selected_rows (selection, &treemodel);
+    dl_list = user_data;
+    dl_track = g_malloc (sizeof (DownloadTrack));
+    gtk_tree_model_get_iter (tree_model, &iter, tree_path);
+    gtk_tree_model_get (tree_model, &iter,
+                        URL_COLUMN, &dl_track->url,
+                        ARTIST_COLUMN, &artist_name,
+                        TITLE_COLUMN, &track_title,
+                        -1);
 
-    i = g_list_first (selected_rows);
+    dl_track->filename = g_strdup_printf ("%s - %s", artist_name, track_title);
+    *dl_list = g_list_append (*dl_list, dl_track);
+
+    g_free (artist_name);
+    g_free (track_title);
+}
+
+static void
+on_menu_item_download (GtkWidget *menuItem, gpointer user_data) {
+    GList *to_download;
+    gchar *dl_target_dir;
+
+    to_download = NULL;
+    tree_view_foreach_selected(GTK_TREE_VIEW (user_data), append_download_track, &to_download);
+    if (to_download == NULL)
+        return; // Nothing selected
+
+    dl_target_dir = open_directory_selection_dialog ();
+    if (dl_target_dir == NULL)
+        return; // Canceled by user
+
+/* debug */
+    GList *i;
+    i = g_list_first (to_download);
     while (i) {
-        add_to_playlist (treemodel, (GtkTreePath *) i->data);
+        DownloadTrack *dl_track;
+        dl_track = i->data;
+        trace ("%s <- %s\n", dl_track->filename, dl_track->url);
         i = g_list_next (i);
     }
+/****/
 
-    g_list_free (selected_rows);*/
+    // download tracks
+    g_list_free (to_download);
 }
 
 static void
