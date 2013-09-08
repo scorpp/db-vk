@@ -14,9 +14,9 @@ endmacro(dpkg_arch)
 # CPack configuration
 set(CPACK_PACKAGE_NAME "deadbeef-plugin-vk")
 set(CPACK_PACKAGE_VENDOR "https://github.com/scorpp/db-vk")
-set(CPACK_PACKAGE_VERSION "0.1-11")
+set(CPACK_PACKAGE_VERSION "0.1-12")
 set(CPACK_PACKAGE_CONTACT "keryascorpio@gmail.com")
-set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Deadbeef plugin for VKontakte")
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "DeaDBeeF plugin for VKontakte")
 
 # DEB package config
 set(CPACK_DEBIAN_PACKAGE_MAINTAINER "Kirill Malyshev <keryascorpio@gmail.com>")
