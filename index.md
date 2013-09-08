@@ -1,6 +1,6 @@
 ---
 layout: master
-title: DeadBeef VKontakte plugin by scorpp
+title: DeaDBeef VKontakte plugin by scorpp
 ---
 db-vk
 =====
