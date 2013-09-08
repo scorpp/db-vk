@@ -1,0 +1,23 @@
+---
+    layout: master
+    title: DeaDBeeF VKontakte plugin - Token retrieval
+---
+<p>Copy whole string and paste to plugin configuration</p>
+
+<textarea cols="80" id="vk_token" rows="7"></textarea>
+
+<script type="text/javascript">
+        var params = location.hash.substr(1).split('&');
+        var po = {};
+        for (var i = 0; i < params.length; i++) {
+          var kv = params[i].split('=');
+          po[kv[0]] = kv[1];
+        }
+        var str = "{ "
+        str += "'access_token': '" + po.access_token + "', ";
+        str += "'expires_in': " + po.expires_in + ", ";
+        str += "'user_id': " + po.user_id;
+        str += " }";
+        document.getElementById('vk_token').value += str;
+</script>
+
