@@ -1,0 +1,25 @@
+---
+tag: translations
+en:
+  language: English
+  index:
+    header: DeaDBeeF VKontakte plugin
+    features: Features
+    packages: Packages
+    building_from_source: Building
+    contacts: Contacts
+    view_project_on_github: View the Project on GitHub
+    project_maintained_by: This project is maintained by
+    hosted_by: 'Hosted on GitHub Pages &mdash; Theme by'
+ru:
+  index:
+    header: 'DeaDBeeF VKontakte плагин'
+    features: 'Фичи'
+    packages: 'Пакеты'
+    building_from_source: 'Из сырцов'
+    contacts: 'Контакты'
+    view_project_on_github: 'Страница проекта на GitHub'
+    project_maintained_by: 'Проект поддерживает'
+    hosted_by: 'Хостится на GitHub Pages &mdash; Дизайн'
+---
+

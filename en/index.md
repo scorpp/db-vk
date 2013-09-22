@@ -1,14 +1,11 @@
 ---
 layout: master
-lang: ru
-categories:
-    - ru
+lang: en
 title: DeaDBeef VKontakte plugin by scorpp
 ---
 db-vk
 =====
-DeadBeeF plugin for listening music from vkontakte.com
-На русском
+DeaDBeeF plugin for listening music from vkontakte.com
 
 Features
 --------
@@ -26,12 +23,13 @@ That's it for now.
 Packages
 --------
 
- * [Arch Linux (AUR)] (https://aur.archlinux.org/packages/deadbeef-plugin-vk/)  
- * [Ubuntu 12.10 (GTK2-only build)] (https://github.com/scorpp/db-vk/releases). (Reported to work fine on Debian stable as well.) Package installs to /opt/deadbeef/ prefix as official DeaDBeeF package does. If you have a thirdparty package installed you may need to copy\symlink .so's to ~/.local/lib/deadbeef/ or /usr/lib/deadbeef/  
- * [Gentoo] (https://github.com/megabaks/stuff/tree/master/media-plugins/deadbeef-vk) (appreciations to @megabaks)
+ * [Arch Linux (AUR)](https://aur.archlinux.org/packages/deadbeef-plugin-vk/)  
+ * [Ubuntu 12.10 (GTK2-only build)](https://github.com/scorpp/db-vk/releases). (Reported to work fine on Debian stable as well.) Package installs to /opt/deadbeef/ prefix as official DeaDBeeF package does. If you have a thirdparty package installed you may need to copy\symlink .so's to ~/.local/lib/deadbeef/ or /usr/lib/deadbeef/  
+ * [Gentoo](https://github.com/megabaks/stuff/tree/master/media-plugins/deadbeef-vk) (appreciations to @megabaks)
 
 Building from source
 ------------
+
 ### Dependencies
  * gtk+ (2 or 3 - should correspond to GTK version your Deadbeef is built with)
  * json-glib
@@ -43,16 +41,18 @@ Build it with
 
     cmake .
     make
+
 and copy `vkontakte_gtk*.so` to `~/.local/lib/deadbeef` like this:
     
     mkdir -p ~/.local/lib/deadbeef
     cp vkontakte_gtk*.so ~/.local/lib/deadbeef/
+
 Restart Deadbeeef player for it to load the plugin, now check out `File` menu
 
 Contacts
 --------
 
- * Found a bug or have a problem? [Raise an issue!] (https://github.com/scorpp/db-vk/issues) (This method is appreciated)
+ * Found a bug or have a problem? [Raise an issue!](https://github.com/scorpp/db-vk/issues) (This method is appreciated)
  * Don't have a github account? Comment on <a href="http://vk.com/club53784333" target="_blank">VK group</a>
  * Me <a href="http://vk.com/scorpp" target="_blank">on vk.com</a>
  * Me <a href="http://gplus.to/scorpp" target="_blank">on Google+</a>

@@ -1,12 +1,11 @@
 ---
 ---
-<!doctype html>
-<html>
+{% assign t = site.tags.translations[0] %}<!doctype html>
+<html lang="{{ page.lang }}">
   <head>
     <meta charset="utf-8">
     <meta http-equiv="X-UA-Compatible" content="chrome=1">
     <title>{{ page.title }}</title>
-    <base href="{{ site.baseurl }}"/>
 
     <link rel="stylesheet" href="{{ site.baseurl }}/stylesheets/styles.css">
     <link rel="stylesheet" href="{{ site.baseurl }}/stylesheets/pygment_trac.css">
@@ -18,23 +17,23 @@
   <body>
     <div class="wrapper">
       <header>
-        <h1>DeaDBeeF VKontakte plugin</h1>
+        <h1>{{ t.[page.lang].index.header }}</h1>
 
         <ul>
-          <li><a href="./#features">Features</a></li>
-          <li><a href="./#packages">Packages</a></li>
-          <li><a href="./#building_from_source">Building</a></li>
-          <li><a href="./#contacts">Contacts</a></li>
+          <li><a href="./#features">{{ t.[page.lang].index.features }}</a></li>
+          <li><a href="./#packages">{{ t.[page.lang].index.packages }}</a></li>
+          <li><a href="./#building-from-source">{{ t.[page.lang].index.building_from_source }}</a></li>
+          <li><a href="./#contacts">{{ t.[page.lang].index.contacts }}</a></li>
         </ul>
 
-        <p class="view"><a href="https://github.com/scorpp/db-vk">View the Project on GitHub <small>scorpp/db-vk</small></a></p>
+        <p class="view"><a href="https://github.com/scorpp/db-vk">{{ t.[page.lang].index.view_project_on_github }} <small>scorpp/db-vk</small></a></p>
       </header>
       <section>
         {{ content }}
       </section>
       <footer>
-        <p>This project is maintained by <a href="https://github.com/scorpp">scorpp</a></p>
-        <p><small>Hosted on GitHub Pages &mdash; Theme by <a href="https://github.com/orderedlist">orderedlist</a></small></p>
+        <p>{{ t.[page.lang].index.contacts }} <a href="https://github.com/scorpp">scorpp</a></p>
+        <p><small>{{ t.[page.lang].index.hosted_by }} <a href="https://github.com/orderedlist">orderedlist</a></small></p>
       </footer>
     </div>
     <script src="{{ site.baseurl }}/javascripts/scale.fix.js"></script>    

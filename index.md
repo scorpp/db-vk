@@ -1,57 +1,60 @@
 ---
 layout: master
+lang: ru
 title: DeaDBeef VKontakte plugin by scorpp
 ---
 db-vk
 =====
-DeadBeeF plugin for listening music from vkontakte.com
+Плагин плеера DeaDBeeF для прослушивания музыки из vkontakte.com
 
-Features
---------
+## Фичи {#features}
+Плагин умеет:
  
- * Retrieve 'My Music' contents
- * Search VK.com for music
- * Removes duplicates in search results
- * Narrows search to specific phrase (in contrast to default behaviour which matches any single word from search query)
- * Allow searching in artist name or track title only
- * Copy track(s) URL to clipboard (for later download or whatever)
+ * Получать списой "Моей музыки"
+ * Искать музыку на VK.com
+ * Чистить дубликаты в результатах поиска
+ * Сужать поиск до фразы целиком (в то время как по умолчанию совпадением считается вхождение любого отдельного слова из запроса)
+ * Позволяет искать только в имени исполнителя или названии трека
+ * Копировать ссылки на треки (для последующего скачивания или чего-то ещё)
 
-Track(s) can be added to current playlist by double click or with popup menu.  
-That's it for now.
+Треки можно добавлять в текущий плейлист двойным кликом либо через контекстное меню.  
+Вот и всё.
 
-Packages
---------
+## Пакеты {#packages}
 
- * [Arch Linux (AUR)] (https://aur.archlinux.org/packages/deadbeef-plugin-vk/)  
- * [Ubuntu 12.10 (GTK2-only build)] (https://github.com/scorpp/db-vk/releases). (Reported to work fine on Debian stable as well.) Package installs to /opt/deadbeef/ prefix as official DeaDBeeF package does. If you have a thirdparty package installed you may need to copy\symlink .so's to ~/.local/lib/deadbeef/ or /usr/lib/deadbeef/  
- * [Gentoo] (https://github.com/megabaks/stuff/tree/master/media-plugins/deadbeef-vk) (appreciations to @megabaks)
+ * [Arch Linux (AUR)](https://aur.archlinux.org/packages/deadbeef-plugin-vk/)  
+ * [Ubuntu (х32 GTK2-only build)](https://github.com/scorpp/db-vk/releases). (Должно работать и на Debian stable.) Пакет ставит плагин в /opt/deadbeef/, куда ставится официальный пакет DeaDBeeF. Если у вас установлен плеер другой сборки, может понадобится скопировать или создать симлинк на плагин в ~/.local/lib/deadbeef/ или /usr/lib/deadbeef/  
+ * [Gentoo](https://github.com/megabaks/stuff/tree/master/media-plugins/deadbeef-vk) (спасибо @megabaks)
 
-Building from source
-------------
-### Dependencies
- * gtk+ (2 or 3 - should correspond to GTK version your Deadbeef is built with)
+К сожалению, сейчас нет возможности собирать пакеты для amd64.
+
+## Сборка из исходников {#building-from-source}
+
+### Зависимости
+ * gtk+ (2 or 3 - версия должна соответствовать той версии GTK, с которой у вас собран Deadbeef)
  * json-glib
  * curl
  * cmake
 
-### Building
-Build it with
+### Сборка
+Для сборки достаточно из каталога с исходниками выполнить
 
     cmake .
     make
-and copy `vkontakte_gtk*.so` to `~/.local/lib/deadbeef` like this:
+
+и скопировать `vkontakte_gtk*.so` в `~/.local/lib/deadbeef` например так:
     
     mkdir -p ~/.local/lib/deadbeef
     cp vkontakte_gtk*.so ~/.local/lib/deadbeef/
-Restart Deadbeeef player for it to load the plugin, now check out `File` menu
 
-Contacts
---------
+Перезапустите Deadbeeef, чтобы загрузить плагин, и загляните в пункт меню "Файл".
 
- * Found a bug or have a problem? [Raise an issue!] (https://github.com/scorpp/db-vk/issues) (This method is appreciated)
- * Don't have a github account? Comment on <a href="http://vk.com/club53784333" target="_blank">VK group</a>
- * Me <a href="http://vk.com/scorpp" target="_blank">on vk.com</a>
- * Me <a href="http://gplus.to/scorpp" target="_blank">on Google+</a>
+## Контакты {#contacts}
+
+ * Нашли ошибку или столкнулись с проблемой? [Заведите тикет!](https://github.com/scorpp/db-vk/issues) (This method is appreciated)
+ * Нету аккаунта на github? Оставьте коментарий в <a href="http://vk.com/club53784333" target="_blank">группе на VK</a>
+ * Я <a href="http://vk.com/scorpp" target="_blank">на vk.com</a>
+ * Я <a href="http://gplus.to/scorpp" target="_blank">в Google+</a>
  * Email & GTalk: keryascorpio_at_gmail.com
 
-I'll be glad to any kind of feedback from you! :)
+Буду рад любым отзывам! :)
