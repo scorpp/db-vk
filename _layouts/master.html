@@ -29,6 +29,7 @@
         <p class="view"><a href="https://github.com/scorpp/db-vk">{{ t.[page.lang].index.view_project_on_github }} <small>scorpp/db-vk</small></a></p>
       </header>
       <section>
+        <div style="float:right;margin-top:-55px;"><a href="{% if page.lang != 'ru' %}../{% else %}en/{% endif %}">{{ t.[page.lang].index.[page.lang]}}</a></div>
         {{ content }}
       </section>
       <footer>

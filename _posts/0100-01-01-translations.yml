@@ -11,6 +11,7 @@ en:
     view_project_on_github: View the Project on GitHub
     project_maintained_by: This project is maintained by
     hosted_by: 'Hosted on GitHub Pages &mdash; Theme by'
+    en: Русский
 ru:
   index:
     header: 'DeaDBeeF VKontakte плагин'
@@ -21,5 +22,6 @@ ru:
     view_project_on_github: 'Страница проекта на GitHub'
     project_maintained_by: 'Проект поддерживает'
     hosted_by: 'Хостится на GitHub Pages &mdash; Дизайн'
+    ru: English
 ---
 
