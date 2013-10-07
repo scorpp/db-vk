@@ -261,9 +261,8 @@ vk_get_my_music_thread_func (void *ctx) {
     query.query = NULL,
     query.store = GTK_TREE_MODEL (ctx);
 
-    char *method_url = g_strdup_printf (VK_API_METHOD_AUDIO_GET "?access_token=%s&count=%d",
-                                        vk_auth_data->access_token,
-                                        VK_AUDIO_MAX_TRACKS);
+    char *method_url = g_strdup_printf (VK_API_METHOD_AUDIO_GET "?access_token=%s",
+                                        vk_auth_data->access_token);
     vk_send_audio_request_and_parse_response (method_url, &query);
 
     g_free (method_url);
