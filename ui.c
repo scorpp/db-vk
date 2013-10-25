@@ -6,6 +6,7 @@
  */
 #include <gtk/gtk.h>
 #include <deadbeef/deadbeef.h>
+#include <deadbeef/gtkui_api.h>
 #include <string.h>
 
 #include "ui.h"
@@ -14,6 +15,7 @@
 
 
 const gchar *last_search_query = NULL;
+extern ddb_gtkui_t *gtkui_plugin;
 
 
 // vkontakte.c
@@ -171,7 +173,8 @@ show_popup_menu (GtkTreeView *treeview, GdkEventButton *event) {
 
 static gboolean
 on_search_results_button_press (GtkTreeView *treeview, GdkEventButton *event, gpointer userdata) {
-    if (event->type == GDK_BUTTON_PRESS && event->button == 3) {
+    if (!gtkui_plugin->w_get_design_mode ()
+            && event->type == GDK_BUTTON_PRESS && event->button == 3) {
         GtkTreeSelection *selection;
 
         selection = gtk_tree_view_get_selection (treeview);
@@ -243,7 +246,6 @@ on_search_target_changed (GtkWidget *widget, gpointer *data) {
 
 GtkWidget *
 vk_create_add_tracks_dlg () {
-    GtkWidget *dlg;
     GtkWidget *dlg_vbox;
     GtkWidget *scroll_window;
     GtkWidget *search_hbox;
@@ -258,13 +260,7 @@ vk_create_add_tracks_dlg () {
     GtkWidget *filter_duplicates;
     GtkWidget *search_whole_phrase;
 
-    dlg = gtk_dialog_new ();
-    gtk_container_set_border_width (GTK_CONTAINER (dlg), 12);
-    gtk_window_set_default_size (GTK_WINDOW (dlg), 840, 400);
-    gtk_window_set_title (GTK_WINDOW (dlg), "Search tracks");
-    gtk_window_set_type_hint (GTK_WINDOW (dlg), GDK_WINDOW_TYPE_HINT_DIALOG);
-
-    dlg_vbox = gtk_dialog_get_content_area (GTK_DIALOG (dlg) );
+    dlg_vbox = gtk_box_new (GTK_ORIENTATION_VERTICAL, 0);
 
     list_store = gtk_list_store_new (N_COLUMNS,
                                      G_TYPE_STRING,     // ARTIST
@@ -330,6 +326,7 @@ vk_create_add_tracks_dlg () {
     g_signal_connect(search_results, "button-press-event", G_CALLBACK(on_search_results_button_press), NULL);
 
     scroll_window = gtk_scrolled_window_new (NULL, NULL);
+    gtk_widget_set_can_focus ( scroll_window, FALSE);    // TODO ??
     gtk_container_add (GTK_CONTAINER (scroll_window), search_results);
     gtk_box_pack_start (GTK_BOX (dlg_vbox), scroll_window, TRUE, TRUE, 12);
 
@@ -365,6 +362,6 @@ vk_create_add_tracks_dlg () {
     g_signal_connect (search_whole_phrase, "clicked",
                       G_CALLBACK (save_active_property_value_to_config), CONF_VK_UI_WHOLE_PHRASE);
 
-    gtk_widget_show_all (dlg);
-    return dlg;
+    gtk_widget_show_all (dlg_vbox);
+    return dlg_vbox;
 }
