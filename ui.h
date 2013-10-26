@@ -42,7 +42,8 @@ struct {
 
 
 gboolean        show_message (GtkMessageType messageType, const gchar *message);
-GtkWidget *     vk_create_add_tracks_dlg ();
+GtkWidget *     vk_create_browser_dialogue ();
+void            vk_setup_browser_widget (ddb_gtkui_widget_t *w);
 
 G_END_DECLS
 #endif /* UI_H_ */

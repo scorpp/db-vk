@@ -335,20 +335,12 @@ w_vkbrowser_create (void) {
 	
     ddb_gtkui_widget_t *w = malloc (sizeof (ddb_gtkui_widget_t));
     memset (w, 0, sizeof (ddb_gtkui_widget_t));
-
-    w->widget = gtk_event_box_new ();
-    gtk_widget_set_can_focus (w->widget, FALSE);
-    gtk_container_add (GTK_CONTAINER (w->widget), vk_create_add_tracks_dlg ());
-
-    gtkui_plugin->w_override_signals (w->widget, w);
+    vk_setup_browser_widget (w);
     return w;
 }
 
 static gboolean
 vk_action_gtk (void *data) {
-    GtkWidget *add_tracks_dlg;
-    GtkWidget *dlg_vbox;
-
 	if (vk_auth_data == NULL) {
 		// not authenticated, show warning and that's it
 		gdk_threads_enter();
@@ -360,17 +352,7 @@ vk_action_gtk (void *data) {
 		return FALSE;
 	}
 	
-	add_tracks_dlg = gtk_dialog_new_with_buttons (
-	        "Search tracks",
-	        GTK_WINDOW (gtkui_plugin->get_mainwin ()),
-	        0,
-            NULL);
-    gtk_container_set_border_width (GTK_CONTAINER (add_tracks_dlg), 12);
-    gtk_window_set_default_size (GTK_WINDOW (add_tracks_dlg), 840, 400);
-
-    dlg_vbox = gtk_dialog_get_content_area (GTK_DIALOG (add_tracks_dlg));
-    gtk_box_pack_start (GTK_BOX (dlg_vbox), vk_create_add_tracks_dlg (), TRUE, TRUE, 0);
-    gtk_widget_show (add_tracks_dlg);
+    gtk_widget_show (vk_create_browser_dialogue ());
     return FALSE;
 }
 

@@ -24,21 +24,6 @@ void vk_search_music (const gchar *query_text, GtkListStore *liststore);
 void vk_get_my_music (GtkTreeModel *liststore);
 void vk_ddb_set_config_var (const char *key, GValue *value);
 
-gboolean
-show_message (GtkMessageType messageType, const gchar *message) {
-    GtkWidget *dlg;
-
-    dlg =  gtk_message_dialog_new (NULL,
-                                   GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
-                                   messageType,
-                                   GTK_BUTTONS_OK,
-                                   "%s",
-                                   message);
-    g_signal_connect_swapped (dlg, "response", G_CALLBACK (gtk_widget_destroy), dlg);
-    gtk_dialog_run (GTK_DIALOG (dlg) );
-    return FALSE;
-}
-
 /**
  * Handler for various search-affecting controls that would trigger search again if needed.
  */
@@ -244,8 +229,9 @@ on_search_target_changed (GtkWidget *widget, gpointer *data) {
     vk_search_opts.search_target = gtk_combo_box_get_active( GTK_COMBO_BOX (widget));
 }
 
+static
 GtkWidget *
-vk_create_add_tracks_dlg () {
+vk_create_browser_widget_content () {
     GtkWidget *dlg_vbox;
     GtkWidget *scroll_window;
     GtkWidget *search_hbox;
@@ -364,4 +350,46 @@ vk_create_add_tracks_dlg () {
 
     gtk_widget_show_all (dlg_vbox);
     return dlg_vbox;
+}
+
+GtkWidget *
+vk_create_browser_dialogue () {
+    GtkWidget* add_tracks_dlg;
+    GtkWidget* dlg_vbox;
+
+    add_tracks_dlg = gtk_dialog_new_with_buttons (
+            "Search tracks",
+            GTK_WINDOW (gtkui_plugin->get_mainwin ()),
+            0,
+            NULL);
+    gtk_container_set_border_width (GTK_CONTAINER (add_tracks_dlg), 12);
+    gtk_window_set_default_size (GTK_WINDOW (add_tracks_dlg), 840, 400);
+    dlg_vbox = gtk_dialog_get_content_area (GTK_DIALOG (add_tracks_dlg));
+    gtk_box_pack_start (GTK_BOX (dlg_vbox), vk_create_browser_widget_content (), TRUE, TRUE, 0);
+    return add_tracks_dlg;
+}
+
+void
+vk_setup_browser_widget (ddb_gtkui_widget_t *w) {
+    // wrap into EventBox for proper design mode widget detection
+    w->widget = gtk_event_box_new ();
+    gtk_widget_set_can_focus (w->widget, FALSE);
+    gtk_container_add (GTK_CONTAINER (w->widget), vk_create_browser_dialogue ());
+
+    gtkui_plugin->w_override_signals (w->widget, w);
+}
+
+gboolean
+show_message (GtkMessageType messageType, const gchar *message) {
+    GtkWidget *dlg;
+
+    dlg =  gtk_message_dialog_new (NULL,
+                                   GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
+                                   messageType,
+                                   GTK_BUTTONS_OK,
+                                   "%s",
+                                   message);
+    g_signal_connect_swapped (dlg, "response", G_CALLBACK (gtk_widget_destroy), dlg);
+    gtk_dialog_run (GTK_DIALOG (dlg) );
+    return FALSE;
 }
