@@ -374,7 +374,7 @@ vk_setup_browser_widget (ddb_gtkui_widget_t *w) {
     // wrap into EventBox for proper design mode widget detection
     w->widget = gtk_event_box_new ();
     gtk_widget_set_can_focus (w->widget, FALSE);
-    gtk_container_add (GTK_CONTAINER (w->widget), vk_create_browser_dialogue ());
+    gtk_container_add (GTK_CONTAINER (w->widget), vk_create_browser_widget_content ());
 
     gtkui_plugin->w_override_signals (w->widget, w);
 }
