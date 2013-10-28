@@ -363,18 +363,21 @@ vk_action_callback (DB_plugin_action_t *action, int ctx) {
 }
 
 static void
-vk_config_changed() {
+vk_config_changed () {
     // restore auth url if it was occasionally changed
     deadbeef->conf_set_str (CONF_VK_AUTH_URL, VK_AUTH_URL);
 
     // read VK auth data
+    deadbeef->conf_lock ();
     const gchar *auth_data_str = deadbeef->conf_get_str_fast (CONF_VK_AUTH_DATA, NULL);
+    deadbeef->conf_unlock ();
+
     vk_auth_data_free (vk_auth_data);
     vk_auth_data = vk_auth_data_parse (auth_data_str);
 }
 
 static int
-vk_ddb_connect() {
+vk_ddb_connect () {
 	gtkui_plugin = (ddb_gtkui_t *) deadbeef->plug_get_for_id (DDB_GTKUI_PLUGIN_ID);
 	
 	if (gtkui_plugin && gtkui_plugin->gui.plugin.version_major == 2) {  // gtkui version 2
@@ -424,10 +427,10 @@ vk_ddb_message (uint32_t id, uintptr_t ctx, uint32_t p1, uint32_t p2) {
 }
 
 static int
-vk_ddb_stop() {
+vk_ddb_disconnect () {
     vk_auth_data_free(vk_auth_data);
     if (gtkui_plugin) {
-//        gtkui_plugin->w_unreg_widget
+        gtkui_plugin->w_unreg_widget ("vkbrowser");
     }
     return 0;
 }
@@ -437,25 +440,25 @@ static const char vk_config_dlg[] =
     "property \"Paste data from the page here\" entry " CONF_VK_AUTH_DATA " \"\";\n";
 	
 DB_misc_t plugin = {
-	.plugin.api_vmajor = 1,
-	.plugin.api_vminor = 5,
+    DDB_REQUIRE_API_VERSION(1, 5)
 	.plugin.type = DB_PLUGIN_MISC,
 	.plugin.version_major = 0,
 	.plugin.version_minor = 1,
 #if GTK_CHECK_VERSION(3,0,0)
-	.plugin.id = "vkontakte_3",
+	.plugin.id          = "vkontakte_3",
 #else
-	.plugin.id = "vkontakte_2",
+	.plugin.id          = "vkontakte_2",
 #endif
-	.plugin.name = "VKontakte",
-	.plugin.descr = "Play music from VKontakte social network site.\n",
-	.plugin.copyright = "Kirill Malyshev",
-	.plugin.website = "http://scorpp.github.io/db-vk/",
-	.plugin.configdialog = vk_config_dlg,
-	.plugin.stop = vk_ddb_stop,
-	.plugin.connect = vk_ddb_connect,
-	.plugin.message = vk_ddb_message,
-	.plugin.get_actions = vk_ddb_getactions,
+	.plugin.name        = "VKontakte",
+	.plugin.descr       = "Play music from VKontakte social network site.\n",
+	.plugin.copyright   = "Kirill Malyshev",
+	.plugin.website     = "http://scorpp.github.io/db-vk/",
+	// callbacks
+	.plugin.configdialog    = vk_config_dlg,
+	.plugin.connect         = vk_ddb_connect,
+	.plugin.disconnect      = vk_ddb_disconnect,
+	.plugin.message         = vk_ddb_message,
+	.plugin.get_actions     = vk_ddb_getactions,
 };
 
 DB_plugin_t *
