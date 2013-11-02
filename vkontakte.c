@@ -10,13 +10,15 @@
 #include <curl/curl.h>
 
 #include "common-defs.h"
+#include "vkontakte-vfs.h"
 #include "vk-api.h"
 #include "ui.h"
 
 DB_functions_t *deadbeef;
 ddb_gtkui_t *gtkui_plugin;
+DB_vfs_t *vfs_curl_plugin;
 
-static VkAuthData *vk_auth_data = NULL;
+VkAuthData *vk_auth_data = NULL;
 
 static intptr_t http_tid;	// thread for communication
 
@@ -155,6 +157,8 @@ parse_audio_track_callback (VkAudioTrack *track, guint index, gpointer userdata)
                             DURATION_COLUMN, track->duration,
                             DURATION_FORMATTED_COLUMN, duration_formatted,
                             URL_COLUMN, track->url,
+                            AID_COLUMN, track->aid,
+                            OWNER_ID_COLUMN, track->owner_id,
                             -1);
         g_free (duration_formatted);
 	}
@@ -177,15 +181,19 @@ vk_add_track_from_tree_model_to_playlist (GtkTreeModel *treestore, GtkTreeIter *
 	gchar *artist;
 	gchar *title;
 	int duration;
-	gchar *url;
+	int aid;
+	int owner_id;
+	const gchar *url;
 	ddb_playlist_t *plt;
 	
 	gtk_tree_model_get (treestore, iter,
 	                    ARTIST_COLUMN, &artist,
 	                    TITLE_COLUMN, &title,
 	                    DURATION_COLUMN, &duration,
-	                    URL_COLUMN, &url,
+	                    AID_COLUMN, &aid,
+	                    OWNER_ID_COLUMN, &owner_id,
 	                    -1);
+	url = vk_ddb_vfs_format_track_url (aid, owner_id, artist, title);
 	plt = deadbeef->plt_get_curr ();
 	                    
 	DB_playItem_t *pt;
@@ -206,7 +214,7 @@ vk_add_track_from_tree_model_to_playlist (GtkTreeModel *treestore, GtkTreeIter *
 	deadbeef->plt_unref (plt);
 	g_free (artist);
 	g_free (title);
-	g_free (url);
+	g_free ((gchar *) url);
 }
 
 static void
@@ -323,14 +331,7 @@ static ddb_gtkui_widget_t *
 w_vkbrowser_create (void) {
     if (vk_auth_data == NULL) {
 		// not authenticated, show warning and that's it
-//		gdk_threads_enter();
-//		show_message (GTK_MESSAGE_WARNING,
-//		              "To be able to use VKontakte plugin you need to provide your\n"
-//		              "authentication details. Please visit plugin configuration.\n"
-//		              "Then you will be able to add tracks from VK.com");
-//		gdk_threads_leave();
-//		return FALSE;
-//	    TODO
+        // TODO
     }
 	
     ddb_gtkui_widget_t *w = malloc (sizeof (ddb_gtkui_widget_t));
@@ -378,6 +379,12 @@ vk_config_changed () {
 
 static int
 vk_ddb_connect () {
+    vfs_curl_plugin = (DB_vfs_t *) deadbeef->plug_get_for_id ("vfs_curl");
+    if (!vfs_curl_plugin) {
+        trace ("cURL VFS plugin required");
+        return -1;
+    }
+
 	gtkui_plugin = (ddb_gtkui_t *) deadbeef->plug_get_for_id (DDB_GTKUI_PLUGIN_ID);
 	
 	if (gtkui_plugin && gtkui_plugin->gui.plugin.version_major == 2) {  // gtkui version 2
@@ -388,6 +395,8 @@ vk_ddb_connect () {
 
 
         gtkui_plugin->w_reg_widget ("VK Browser", DDB_WF_SINGLE_INSTANCE, w_vkbrowser_create, "vkbrowser", NULL);
+
+        vk_config_changed ();   // refresh config at start
         return 0;
     }
 
@@ -439,9 +448,9 @@ static const char vk_config_dlg[] =
     "property \"Navigate to the URL in text box\n(don't change the URL here)\" entry " CONF_VK_AUTH_URL " " VK_AUTH_URL ";\n"
     "property \"Paste data from the page here\" entry " CONF_VK_AUTH_DATA " \"\";\n";
 	
-DB_misc_t plugin = {
+DB_vfs_t plugin = {
     DDB_REQUIRE_API_VERSION(1, 5)
-	.plugin.type = DB_PLUGIN_MISC,
+	.plugin.type = DB_PLUGIN_VFS,
 	.plugin.version_major = 0,
 	.plugin.version_minor = 1,
 #if GTK_CHECK_VERSION(3,0,0)
@@ -459,6 +468,12 @@ DB_misc_t plugin = {
 	.plugin.disconnect      = vk_ddb_disconnect,
 	.plugin.message         = vk_ddb_message,
 	.plugin.get_actions     = vk_ddb_getactions,
+	// overriding minimum methods of a VFS plugin since cfs_curl will do all
+	// the work for us. files open with vkontakte plugin will actually look
+	// as those opened by vfs_curl.
+	.get_schemes    = vk_ddb_vfs_get_schemes,
+	.is_streaming   = vk_ddb_vfs_is_streaming,
+	.open           = vk_ddb_vfs_open
 };
 
 DB_plugin_t *

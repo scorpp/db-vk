@@ -253,7 +253,10 @@ vk_create_browser_widget_content () {
                                      G_TYPE_STRING,     // TITLE
                                      G_TYPE_INT,        // DURATION seconds, not rendered
                                      G_TYPE_STRING,     // DURATION_FORMATTED
-                                     G_TYPE_STRING );   // URL, not rendered
+                                     G_TYPE_STRING,     // URL, not rendered
+                                     G_TYPE_INT,        // AID, not rendered
+                                     G_TYPE_INT         // OWNER_ID, not rendered
+                                     );
 
     search_hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
     gtk_box_pack_start (GTK_BOX (dlg_vbox), search_hbox, FALSE, FALSE, 0);

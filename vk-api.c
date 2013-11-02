@@ -8,8 +8,6 @@
 #include <assert.h>
 #include <string.h>
 #include <glib-object.h>
-#include <json-glib/json-glib.h>
-
 #include "common-defs.h"
 #include "vk-api.h"
 
