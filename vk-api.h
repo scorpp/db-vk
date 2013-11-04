@@ -67,10 +67,11 @@ void            vk_auth_data_free (VkAuthData *vk_auth_data);
  * @return FALSE if error occurred, error details stored in error parameter.
  * TRUE otherwise
  */
-gboolean vk_audio_response_parse (const gchar *json,
-								  VkAudioTrackCallback callback,
-								  gpointer userdata,
-								  GError **error);
+gboolean        vk_audio_response_parse (const gchar *json,
+                                         VkAudioTrackCallback callback,
+                                         gpointer userdata,
+                                         GError **error);
+
 /**
  * Checks if response contains error, returns TRUE and sets error appropriately in
  * case of failure. Just returns FALSE otherwise.

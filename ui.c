@@ -60,13 +60,13 @@ save_active_property_value_to_config (GtkWidget *widget, gpointer data) {
 
 static void
 add_to_playlist (GtkTreeModel *treemodel, GtkTreePath *path) {
-	GtkTreeIter treeiter;
+    GtkTreeIter treeiter;
 
-	if (gtk_tree_model_get_iter(treemodel, &treeiter, path)) {
-		vk_add_track_from_tree_model_to_playlist(treemodel, &treeiter);
-	} else {
-		trace("gtk_tree_model_get_iter failed, %s:%d", __FILE__, __LINE__);
-	}
+    if (gtk_tree_model_get_iter(treemodel, &treeiter, path)) {
+        vk_add_track_from_tree_model_to_playlist(treemodel, &treeiter);
+    } else {
+        trace("gtk_tree_model_get_iter failed, %s:%d", __FILE__, __LINE__);
+    }
 }
 
 static void
@@ -76,9 +76,9 @@ on_search_results_row_activate (GtkTreeView *tree_view,
                                 gpointer user_data) {
     GtkTreeModel *model;
 
-	model = gtk_tree_view_get_model(tree_view);
+    model = gtk_tree_view_get_model(tree_view);
 
-	add_to_playlist(model, path);
+    add_to_playlist(model, path);
 }
 
 static void
