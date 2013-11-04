@@ -20,12 +20,11 @@ gchar *
 http_get_string (const gchar *url, GError **error) {
     CURL *curl;
     GString *resp_str;
-    gchar *curl_err_buf;
+    char curl_err_buf[CURL_ERROR_SIZE];
 
     curl = curl_easy_init ();
     resp_str = g_string_sized_new (1024 * 3);
 
-    curl_err_buf = g_malloc (CURL_ERROR_SIZE);
 
     trace ("Requesting URL %s\n", url);
 
@@ -47,16 +46,10 @@ http_get_string (const gchar *url, GError **error) {
                               status,
                               "%s",
                               curl_err_buf);
-        g_free (curl_err_buf);
-        curl_easy_cleanup (curl);
-        return NULL;
     }
 
-    g_free (curl_err_buf);
     curl_easy_cleanup (curl);
 
-    // return as simple gchar *
-    gchar *ret = resp_str->str;
-    g_string_free (resp_str, FALSE);
-    return ret;
+    // return NULL in case of curl error, char buffer otherwise
+    return g_string_free (resp_str, status != 0);
 }

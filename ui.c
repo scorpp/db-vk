@@ -364,6 +364,7 @@ vk_create_browser_dialogue () {
             "Search tracks",
             GTK_WINDOW (gtkui_plugin->get_mainwin ()),
             0,
+            NULL,
             NULL);
     gtk_container_set_border_width (GTK_CONTAINER (add_tracks_dlg), 12);
     gtk_window_set_default_size (GTK_WINDOW (add_tracks_dlg), 840, 400);
