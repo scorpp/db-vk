@@ -9,12 +9,16 @@
 #define VK_API_H_
 G_BEGIN_DECLS
 
+#include <json-glib/json-glib.h>
+
 
 #define VK_API_URL "https://api.vk.com/method"
 /** Search arbitrary tracks */
 #define VK_API_METHOD_AUDIO_SEARCH VK_API_URL "/audio.search"
 /** Retrieve 'My music' contents */
 #define VK_API_METHOD_AUDIO_GET VK_API_URL "/audio.get"
+/** Retrieve details of a track by it's ID */
+#define VK_API_METHOD_AUDIO_GET_BY_ID VK_API_URL "/audio.getById"
 
 
 typedef struct {
@@ -63,10 +67,11 @@ void            vk_auth_data_free (VkAuthData *vk_auth_data);
  * @return FALSE if error occurred, error details stored in error parameter.
  * TRUE otherwise
  */
-gboolean vk_audio_response_parse (const gchar *json,
-								  VkAudioTrackCallback callback,
-								  gpointer userdata,
-								  GError **error);
+gboolean        vk_audio_response_parse (const gchar *json,
+                                         VkAudioTrackCallback callback,
+                                         gpointer userdata,
+                                         GError **error);
+
 /**
  * Checks if response contains error, returns TRUE and sets error appropriately in
  * case of failure. Just returns FALSE otherwise.

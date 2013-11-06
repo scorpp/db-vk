@@ -14,6 +14,9 @@ G_BEGIN_DECLS
 
 #define trace(...) { g_fprintf(stderr, __VA_ARGS__); }
 
+
+typedef void (*DB_thread_func_t)(void *ctx);
+
 G_END_DECLS
 
 #endif /* COMMON_DEFS_H_ */
