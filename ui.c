@@ -229,6 +229,13 @@ on_search_target_changed (GtkWidget *widget, gpointer *data) {
     vk_search_opts.search_target = gtk_combo_box_get_active( GTK_COMBO_BOX (widget));
 }
 
+static GtkCellRenderer *
+vk_gtk_cell_renderer_text_new_with_ellipsis () {
+    GtkCellRenderer *renderer = gtk_cell_renderer_text_new ();
+    g_object_set (renderer, "ellipsize", PANGO_ELLIPSIZE_END, NULL);
+    return renderer;
+}
+
 static
 GtkWidget *
 vk_create_browser_widget_content () {
@@ -239,8 +246,6 @@ vk_create_browser_widget_content () {
     GtkWidget *search_target;
     GtkWidget *search_results;
     GtkListStore *list_store;
-    GtkCellRenderer *artist_cell;
-    GtkCellRenderer *title_cell;
     GtkWidget *bottom_hbox;
     GtkWidget *my_music_button;
     GtkWidget *filter_duplicates;
@@ -275,36 +280,45 @@ vk_create_browser_widget_content () {
     g_signal_connect (search_target, "changed", G_CALLBACK (on_search_target_changed), NULL);
     gtk_box_pack_start (GTK_BOX (search_hbox), search_target, FALSE, FALSE, 0);
 
-    GtkCellRenderer *duration_cell;
     search_results = gtk_tree_view_new_with_model (GTK_TREE_MODEL (list_store));
-    artist_cell = gtk_cell_renderer_text_new ();
-    title_cell = gtk_cell_renderer_text_new ();
-    duration_cell = gtk_cell_renderer_text_new ();
     gtk_tree_view_insert_column_with_attributes (GTK_TREE_VIEW (search_results), -1, "Artist",
-                                                 artist_cell, "text", ARTIST_COLUMN, NULL);
+                                                 vk_gtk_cell_renderer_text_new_with_ellipsis (),
+                                                 "text", ARTIST_COLUMN, NULL);
     gtk_tree_view_insert_column_with_attributes (GTK_TREE_VIEW (search_results), -1, "Title",
-                                                 title_cell, "text", TITLE_COLUMN, NULL);
+                                                 vk_gtk_cell_renderer_text_new_with_ellipsis (),
+                                                 "text", TITLE_COLUMN, NULL);
     gtk_tree_view_insert_column_with_attributes (GTK_TREE_VIEW (search_results), -1, "Duration",
-                                                 duration_cell, "text", DURATION_FORMATTED_COLUMN, NULL);
+                                                 gtk_cell_renderer_text_new (),
+                                                 "text", DURATION_FORMATTED_COLUMN, NULL);
 
     //// Setup columns
     GtkTreeViewColumn *col;
     // artist col is resizeable and sortable
     col = gtk_tree_view_get_column (GTK_TREE_VIEW (search_results), 0);
-    gtk_tree_view_column_set_resizable (col, TRUE);
-    gtk_tree_view_column_set_sort_column_id (col, 0);
+    g_object_set (col,
+                  "sizing", GTK_TREE_VIEW_COLUMN_FIXED,
+                  "resizable", TRUE,
+                  "expand", TRUE,
+                  "sort-column-id", 0,
+                  NULL);
     // title col is resizeable, sortable and expanded
     col = gtk_tree_view_get_column (GTK_TREE_VIEW (search_results), 1);
-    gtk_tree_view_column_set_resizable (col, TRUE);
-    gtk_tree_view_column_set_expand (col, TRUE);
-    gtk_tree_view_column_set_sort_column_id (col, 1);
+    g_object_set (col,
+                  "sizing", GTK_TREE_VIEW_COLUMN_FIXED,
+                  "resizable", TRUE,
+                  "expand", TRUE,
+                  "sort-column-id", 1,
+                  NULL);
     // duration col is sortable and fixed width
     col = gtk_tree_view_get_column (GTK_TREE_VIEW (search_results), 2);
-    gtk_tree_view_column_set_min_width(col, 10);
-    gtk_tree_view_column_set_max_width(col, 70);
-    gtk_tree_view_column_set_fixed_width (col, 50);
-    gtk_tree_view_column_set_sizing (col, GTK_TREE_VIEW_COLUMN_FIXED);
-    gtk_tree_view_column_set_sort_column_id (col, 2);
+    g_object_set (col,
+                  "sizing", GTK_TREE_VIEW_COLUMN_FIXED,
+                  "resizable", TRUE,
+                  "min-width", 20,
+                  "max-width", 70,
+                  "fixed-width", 50,
+                  "sort-column-id", 2,
+                  NULL);
 
 
     gtk_tree_selection_set_mode (gtk_tree_view_get_selection (GTK_TREE_VIEW (search_results)),
@@ -315,7 +329,7 @@ vk_create_browser_widget_content () {
     g_signal_connect(search_results, "button-press-event", G_CALLBACK(on_search_results_button_press), NULL);
 
     scroll_window = gtk_scrolled_window_new (NULL, NULL);
-    gtk_widget_set_can_focus ( scroll_window, FALSE);    // TODO ??
+    gtk_scrolled_window_set_policy (GTK_SCROLLED_WINDOW (scroll_window), GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
     gtk_container_add (GTK_CONTAINER (scroll_window), search_results);
     gtk_box_pack_start (GTK_BOX (dlg_vbox), scroll_window, TRUE, TRUE, 12);
 

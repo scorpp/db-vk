@@ -33,7 +33,7 @@ typedef struct {
         "&response_type=token"
 
 // URL formatting strings
-#define VK_URL_LEN          300
+#define MAX_URL_LEN         300
 #define VK_AUDIO_GET        VK_API_METHOD_AUDIO_GET "?access_token=%s"
 #define VK_AUDIO_GET_BY_ID  VK_API_METHOD_AUDIO_GET_BY_ID "?access_token=%s&audios=%d_%d"
 #define VK_AUDIO_SEARCH     VK_API_METHOD_AUDIO_SEARCH "?access_token=%s&count=%d&offset=%d&q=%s"
@@ -49,10 +49,11 @@ typedef struct {
 // util.c
 gchar *     http_get_string(const gchar *url, GError **error);
 
-int
-vk_vfs_format_track_url(char *url,
-                        int aid,
-                        int owner_id) {
+
+static int
+vk_vfs_format_track_url (char *url,
+                         int aid,
+                         int owner_id) {
     return sprintf (url, "vk://%d_%d", owner_id, aid);
 }
 
@@ -60,7 +61,7 @@ vk_vfs_format_track_url(char *url,
  * Simple deduplication.
  * @return TRUE if given track already exists, FALSE otherwise.
  */
-gboolean
+static gboolean
 vk_tree_model_has_track (GtkTreeModel *treemodel, VkAudioTrack *track) {
     // if no need to filter duplicates return FALSE immediately
     if (!vk_search_opts.filter_duplicates) {
@@ -255,7 +256,7 @@ vk_search_audio_thread_func (SearchQuery *query) {
     char *escaped_search_str = curl_easy_escape (curl, query->query, 0);
 
     do {
-        char method_url[VK_URL_LEN];
+        char method_url[MAX_URL_LEN];
 
         rows_added = gtk_tree_model_iter_n_children (query->store, NULL);
         sprintf (method_url,
@@ -268,6 +269,8 @@ vk_search_audio_thread_func (SearchQuery *query) {
         rows_added = gtk_tree_model_iter_n_children (query->store, NULL) - rows_added;
     } while (++iteration < 10 && rows_added > 0);
 
+    trace ("INFO: Did %d iterations and stopped discovering new tracks\n", iteration);
+
     g_free (escaped_search_str);
     curl_easy_cleanup (curl);
     g_free ((gchar *) query->query);
@@ -278,7 +281,7 @@ vk_search_audio_thread_func (SearchQuery *query) {
 static void
 vk_get_my_music_thread_func (void *ctx) {
     SearchQuery query;
-    char method_url[VK_URL_LEN];
+    char method_url[MAX_URL_LEN];
 
     query.query = NULL,
     query.store = GTK_TREE_MODEL (ctx);
@@ -389,7 +392,7 @@ vk_ddb_vfs_open (const char *fname) {
     GError *error;
     DB_FILE *f = 0;
     char *audio_resp;
-    char get_audio_url[VK_URL_LEN];
+    char get_audio_url[MAX_URL_LEN];
 
     if (!vk_auth_data || !vk_auth_data->access_token) {
         trace ("Not authenticated? Visit VK.com\n");
