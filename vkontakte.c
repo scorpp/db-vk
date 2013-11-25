@@ -520,7 +520,7 @@ DB_vfs_t plugin = {
     DDB_REQUIRE_API_VERSION(1, 5)
     .plugin.type = DB_PLUGIN_VFS,
     .plugin.version_major = 0,
-    .plugin.version_minor = 1,
+    .plugin.version_minor = 2,
 #if GTK_CHECK_VERSION(3,0,0)
     .plugin.id          = "vkontakte_3",
 #else
