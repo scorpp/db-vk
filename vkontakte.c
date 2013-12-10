@@ -358,6 +358,7 @@ static gboolean
 vk_action_gtk (void *data) {
     if (vk_auth_data == NULL) {
         // not authenticated, show warning and that's it
+        trace ("VK - not authenticated\n")
         gdk_threads_enter ();
         show_message (GTK_MESSAGE_WARNING,
                       "To be able to use VKontakte plugin you need to provide your\n"
@@ -368,6 +369,7 @@ vk_action_gtk (void *data) {
     }
 
     gtk_widget_show (vk_create_browser_dialogue ());
+    trace("Widget shown\n");
     return FALSE;
 }
 
@@ -449,7 +451,7 @@ static int
 vk_ddb_connect () {
     vfs_curl_plugin = (DB_vfs_t *) deadbeef->plug_get_for_id ("vfs_curl");
     if (!vfs_curl_plugin) {
-        trace ("cURL VFS plugin required");
+        trace ("cURL VFS plugin required\n");
         return -1;
     }
 

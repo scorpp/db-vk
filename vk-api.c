@@ -35,7 +35,7 @@ typedef struct {
 VkAuthData *
 vk_auth_data_parse (const gchar *auth_data_str) {
     if (auth_data_str == NULL || strlen (auth_data_str) == 0) {
-        trace ("VK auth data missing");
+        trace ("VK auth data missing\n");
         return NULL ;
     }
     VkAuthData *vk_auth_data = NULL;
@@ -43,7 +43,7 @@ vk_auth_data_parse (const gchar *auth_data_str) {
     JsonParser *parser = json_parser_new ();
 
     if (!json_parser_load_from_data (parser, auth_data_str, strlen (auth_data_str), &error)) {
-        trace ("VK auth data invalid");
+        trace ("VK auth data invalid\n");
         g_free (error);
         g_object_unref (parser);
         return NULL;
