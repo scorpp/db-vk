@@ -475,7 +475,7 @@ static DB_plugin_action_t vk_action = {
     .title = "File/Add tracks from VK",
     .name = "vk_add_tracks",
     .flags = DB_ACTION_COMMON | DB_ACTION_ADD_MENU,
-    .callback = (DB_plugin_action_callback_t) vk_action_callback,
+    .callback2 = (DB_plugin_action_callback2_t) vk_action_callback,
     .next = NULL,
 };
 
