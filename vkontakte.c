@@ -1,6 +1,9 @@
 // disable gdk_thread_enter\leave warnings
 #define GDK_VERSION_MIN_REQUIRED GDK_VERSION_3_4
 
+#define DDB_WARN_DEPRECATED 1
+#define DDB_API_LEVEL 6
+
 #include <gtk/gtk.h>
 #include <deadbeef/deadbeef.h>
 #include <deadbeef/gtkui_api.h>
@@ -192,42 +195,55 @@ parse_audio_resp (SearchQuery *query, const gchar *resp_str) {
 }
 
 void
-vk_add_track_from_tree_model_to_playlist (GtkTreeModel *treestore, GtkTreeIter *iter) {
-    gchar *artist;
-    gchar *title;
-    int duration;
-    int aid;
-    int owner_id;
-    char url[VK_VFS_URL_LEN];
+vk_add_tracks_from_tree_model_to_playlist (GtkTreeModel *treemodel, GList *gtk_tree_path_list) {
     ddb_playlist_t *plt;
 
-    gtk_tree_model_get (treestore, iter,
-                        ARTIST_COLUMN, &artist,
-                        TITLE_COLUMN, &title,
-                        DURATION_COLUMN, &duration,
-                        AID_COLUMN, &aid,
-                        OWNER_ID_COLUMN, &owner_id,
-                        -1);
-    vk_vfs_format_track_url (url, aid, owner_id);
     plt = deadbeef->plt_get_curr ();
 
-    DB_playItem_t *pt;
-    int pabort = 0;
-
-    deadbeef->pl_lock();
-    if (!deadbeef->pl_add_files_begin (plt)) {
+    if (!deadbeef->plt_add_files_begin (plt, 0)) {
         DB_playItem_t *last = deadbeef->plt_get_last (plt, 0);
-        pt = deadbeef->plt_insert_file (plt, last, url, &pabort, NULL, NULL);
-        deadbeef->pl_add_meta (pt, "artist", artist);
-        deadbeef->pl_add_meta (pt, "title", title);
-        deadbeef->plt_set_item_duration (plt, pt, duration);
-        deadbeef->pl_add_files_end();
-    }
-    deadbeef->pl_unlock();
 
+        gtk_tree_path_list = g_list_last (gtk_tree_path_list);
+        while (gtk_tree_path_list) {
+            GtkTreeIter iter;
+            gchar *artist;
+            gchar *title;
+            int duration;
+            int aid;
+            int owner_id;
+            char url[VK_VFS_URL_LEN];
+
+            if (gtk_tree_model_get_iter(treemodel, &iter, (GtkTreePath *) gtk_tree_path_list->data)) {
+                DB_playItem_t *pt;
+                int pabort = 0;
+
+                gtk_tree_model_get (treemodel, &iter,
+                                    ARTIST_COLUMN, &artist,
+                                    TITLE_COLUMN, &title,
+                                    DURATION_COLUMN, &duration,
+                                    AID_COLUMN, &aid,
+                                    OWNER_ID_COLUMN, &owner_id,
+                                    -1);
+                vk_vfs_format_track_url (url, aid, owner_id);
+
+                pt = deadbeef->plt_insert_file2 (0, plt, last, url, &pabort, NULL, NULL);
+                deadbeef->pl_add_meta (pt, "artist", artist);
+                deadbeef->pl_add_meta (pt, "title", title);
+                deadbeef->plt_set_item_duration (plt, pt, duration);
+
+                g_free (artist);
+                g_free (title);
+            }
+
+            gtk_tree_path_list = g_list_previous (gtk_tree_path_list);
+        }
+
+        deadbeef->pl_item_unref (last);
+    }
+
+    deadbeef->plt_add_files_end (plt, 0);
+    deadbeef->plt_save_config (plt);
     deadbeef->plt_unref (plt);
-    g_free (artist);
-    g_free (title);
 }
 
 static void
