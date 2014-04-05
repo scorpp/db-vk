@@ -238,7 +238,9 @@ vk_add_tracks_from_tree_model_to_playlist (GtkTreeModel *treemodel, GList *gtk_t
             gtk_tree_path_list = g_list_previous (gtk_tree_path_list);
         }
 
-        deadbeef->pl_item_unref (last);
+        if (last) {
+            deadbeef->pl_item_unref (last);
+        }
     }
 
     deadbeef->plt_add_files_end (plt, 0);
@@ -397,6 +399,7 @@ vk_ddb_vfs_get_schemes () {
 
 static void
 vk_vfs_store_track (VkAudioTrack *track, int index, DB_FILE **f) {
+    trace ("vk_vfs_store_track: %s, index=%d\n", track->url, index);
     if (index == 0) {
         // TODO ensure URL is of supported scheme
         *f = deadbeef->fopen (track->url);
