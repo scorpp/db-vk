@@ -195,10 +195,16 @@ parse_audio_resp (SearchQuery *query, const gchar *resp_str) {
 }
 
 void
-vk_add_tracks_from_tree_model_to_playlist (GtkTreeModel *treemodel, GList *gtk_tree_path_list) {
+vk_add_tracks_from_tree_model_to_playlist (GtkTreeModel *treemodel, GList *gtk_tree_path_list, const char *plt_name) {
     ddb_playlist_t *plt;
 
-    plt = deadbeef->plt_get_curr ();
+    if (plt_name) {
+        int idx = deadbeef->plt_add (deadbeef->plt_get_count (), plt_name);
+        deadbeef->plt_set_curr_idx (idx);
+        plt = deadbeef->plt_get_for_idx (idx);
+    } else {
+        plt = deadbeef->plt_get_curr ();
+    }        
 
     if (!deadbeef->plt_add_files_begin (plt, 0)) {
         DB_playItem_t *last = deadbeef->plt_get_last (plt, 0);

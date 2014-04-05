@@ -19,7 +19,7 @@ extern ddb_gtkui_t *gtkui_plugin;
 
 
 // vkontakte.c
-void vk_add_tracks_from_tree_model_to_playlist (GtkTreeModel *treemodel, GList *gtk_tree_path_list);
+void vk_add_tracks_from_tree_model_to_playlist (GtkTreeModel *treemodel, GList *gtk_tree_path_list, const char *plt_name);
 void vk_search_music (const gchar *query_text, GtkListStore *liststore);
 void vk_get_my_music (GtkTreeModel *liststore);
 void vk_ddb_set_config_var (const char *key, GValue *value);
@@ -59,35 +59,35 @@ save_active_property_value_to_config (GtkWidget *widget, gpointer data) {
 }
 
 static void
-on_search_results_row_activate (GtkTreeView *tree_view,
-                                GtkTreePath *path,
-                                GtkTreeViewColumn *column,
-                                gpointer user_data) {
-    GtkTreeModel *model;
-    GList *list;
-
-    model = gtk_tree_view_get_model(tree_view);
-
-    list = g_list_alloc ();
-    list = g_list_append (list, path);
-
-    vk_add_tracks_from_tree_model_to_playlist (model, list);
-
-    g_list_free (list);
-}
-
-static void
-on_menu_item_add_to_playlist (GtkWidget *menu_item, GtkTreeView *treeview) {
+add_to_playlist (GtkTreeView *tree_view, const char *playlist) {
     GtkTreeSelection *selection;
     GtkTreeModel *treemodel;
     GList *selected_rows;
 
-    selection = gtk_tree_view_get_selection (treeview);
+    selection = gtk_tree_view_get_selection (tree_view);
     selected_rows = gtk_tree_selection_get_selected_rows (selection, &treemodel);
 
-    vk_add_tracks_from_tree_model_to_playlist (treemodel, selected_rows);
+    vk_add_tracks_from_tree_model_to_playlist (treemodel, selected_rows, playlist);
 
-    g_list_free (selected_rows);
+    g_list_free (selected_rows);    
+}
+
+static void
+on_search_results_row_activate (GtkTreeView *tree_view,
+                                GtkTreePath *path,
+                                GtkTreeViewColumn *column,
+                                gpointer user_data) {
+    add_to_playlist (tree_view, NULL);
+}
+
+static void
+on_menu_item_add_to_playlist (GtkWidget *menu_item, GtkTreeView *tree_view) {
+    add_to_playlist (tree_view, NULL);
+}
+
+static void
+on_menu_item_add_to_new_playlist (GtkWidget *menu_item, GtkTreeView *tree_view) {
+    add_to_playlist (tree_view, last_search_query);
 }
 
 static void
@@ -126,11 +126,24 @@ on_menu_item_copy_url (GtkWidget *menu_item, GtkTreeView *treeview) {
 
 static void
 show_popup_menu (GtkTreeView *treeview, GdkEventButton *event) {
+    GtkTreeSelection *selection;
     GtkWidget *menu, *item;
+    char label_buf[200];
+
+    selection = gtk_tree_view_get_selection (treeview);
+    if (!gtk_tree_selection_count_selected_rows (selection)) {
+        // don't show menu on empty tree view
+        return;
+    }
 
     menu = gtk_menu_new ();
 
-    item = gtk_menu_item_new_with_label ("Add to playlist");
+    sprintf(label_buf, "Add to playlist '%s'", last_search_query);
+    item = gtk_menu_item_new_with_label (label_buf);
+    g_signal_connect (item, "activate", G_CALLBACK (on_menu_item_add_to_new_playlist), treeview);
+    gtk_menu_shell_append (GTK_MENU_SHELL (menu), item);
+        
+    item = gtk_menu_item_new_with_label ("Add to current playlist");
     g_signal_connect (item, "activate", G_CALLBACK (on_menu_item_add_to_playlist), treeview);
     gtk_menu_shell_append (GTK_MENU_SHELL (menu), item);
 
