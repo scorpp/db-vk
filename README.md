@@ -2,6 +2,10 @@ db-vk
 =====
 DeadBeef plugin for listening musing from vkontakte.com
 
+For those speaking only Russian
+--------
+За помощью можно обращаться в <a href="http://vk.com/club53784333" target="_blank">группу на ВК</a>
+
 Features
 --------
   * Retrieve 'My Music' contents
