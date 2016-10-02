@@ -25,6 +25,12 @@ Installation
  * json-glib
  * curl
  * cmake
+ * Deadbeef dev files (`deadbeef.h` and `gtkui.h`)
+ 
+For example on Ubuntu the below installs required packages
+
+        sudo apt-get install libgtk2.0-dev libgtk-3-dev \
+            libcurl4-gnutls-dev libjson-glib-dev cmake
 
 ### Building
 Build it with
