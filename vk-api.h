@@ -9,8 +9,6 @@
 #define VK_API_H_
 G_BEGIN_DECLS
 
-#include <json-glib/json-glib.h>
-
 
 #define VK_API_URL "https://api.vk.com/method"
 /** Search arbitrary tracks */
@@ -23,22 +21,22 @@ G_BEGIN_DECLS
 
 typedef struct {
     const gchar *access_token;
-    guint user_id;
-    guint expires_in;
+    glong user_id;
+    glong expires_in;
 } VkAuthData;
 
 
-#define VK_AUDIO_MAX_TRACKS 200
+#define VK_AUDIO_MAX_TRACKS 300
 typedef struct {
     int aid;
     int owner_id;
     const gchar *artist;
     const gchar *title;
     int duration;   // seconds
-    const char *url;
+    const gchar *url;
 } VkAudioTrack;
 
-typedef void (*VkAudioTrackCallback) (VkAudioTrack *track, guint index, gpointer userdata);
+typedef void (*VkAudioTrackCallback) (VkAudioTrack *track, size_t index, gpointer userdata);
 
 /**
  * Tries to parse given authentication data. Expects following JSON structure:
@@ -71,14 +69,6 @@ gboolean        vk_audio_response_parse (const gchar *json,
                                          VkAudioTrackCallback callback,
                                          gpointer userdata,
                                          GError **error);
-
-/**
- * Checks if response contains error, returns TRUE and sets error appropriately in
- * case of failure. Just returns FALSE otherwise.
- *
- * @return TRUE if response contains failure, FALSE otherwise.
- */
-gboolean        vk_error_check (JsonParser *parser, GError **error);
 
 
 G_END_DECLS

@@ -7,12 +7,12 @@
 #include <gtk/gtk.h>
 #include <deadbeef/deadbeef.h>
 #include <deadbeef/gtkui_api.h>
-#include <json-glib/json-glib.h>
 #include <stdlib.h>
 #include <string.h>
 #include <curl/curl.h>
 
 #include "common-defs.h"
+#include "util.h"
 #include "vk-api.h"
 #include "ui.h"
 
@@ -47,10 +47,6 @@ typedef struct {
 
 // Max length for VFS URL to VK track
 #define VK_VFS_URL_LEN  30
-
-
-// util.c
-gchar *     http_get_string(const gchar *url, GError **error);
 
 
 static int
@@ -156,7 +152,7 @@ vk_search_filter_matches (const gchar *search_query, VkAudioTrack *track) {
 }
 
 static void
-parse_audio_track_callback (VkAudioTrack *track, guint index, gpointer userdata) {
+parse_audio_track_callback (VkAudioTrack *track, size_t index, gpointer userdata) {
     SearchQuery *query;
     GtkTreeIter iter;
 
@@ -360,7 +356,7 @@ vk_get_my_music (GtkTreeModel *liststore) {
 
         http_tid = 0;
     }
-    trace("== Getting my music, uid=%d\n", vk_auth_data->user_id);
+    trace("== Getting my music, uid=%ld\n", vk_auth_data->user_id);
 
     http_tid = deadbeef->thread_start (vk_get_my_music_thread_func, liststore);
 }
@@ -466,10 +462,14 @@ vk_config_changed () {
     // read VK auth data
     deadbeef->conf_lock ();
     const gchar *auth_data_str = deadbeef->conf_get_str_fast (CONF_VK_AUTH_DATA, NULL);
+    // old version of authentication page used single quotes instead of double. so silly!
+    auth_data_str = repl_str (auth_data_str, "'", "\"");
     deadbeef->conf_unlock ();
 
     vk_auth_data_free (vk_auth_data);
     vk_auth_data = vk_auth_data_parse (auth_data_str);
+
+    g_free ((gpointer) auth_data_str);
 }
 
 static int
@@ -486,7 +486,7 @@ vk_ddb_connect () {
         // set default UI options
         vk_search_opts.filter_duplicates = (1 == deadbeef->conf_get_int (CONF_VK_UI_DEDUP, 1));
         vk_search_opts.search_whole_phrase = (1 == deadbeef->conf_get_int (CONF_VK_UI_WHOLE_PHRASE, 1));
-        vk_search_opts.search_target = deadbeef->conf_get_int (CONF_VK_UI_TARGET, VK_TARGET_ANY_FIELD);
+        vk_search_opts.search_target = (VkSearchTarget) deadbeef->conf_get_int (CONF_VK_UI_TARGET, VK_TARGET_ANY_FIELD);
 
 
         gtkui_plugin->w_reg_widget ("VK Browser", DDB_WF_SINGLE_INSTANCE, w_vkbrowser_create, "vkbrowser", NULL);

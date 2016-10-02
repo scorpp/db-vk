@@ -8,6 +8,7 @@
 #include <assert.h>
 #include <string.h>
 #include <glib-object.h>
+#include <jansson.h>
 #include "common-defs.h"
 #include "vk-api.h"
 
@@ -27,10 +28,106 @@
 #define VK_ERR_JSON_MSG_KEY     "error_msg"
 #define VK_ERR_JSON_EXTRA_KEY   "request_params"
 
-typedef struct {
-    VkAudioTrackCallback callback;
-    gpointer callback_userdata;
-} _VkAudioParseParams;
+
+/**
+ * Checks if response contains error, returns TRUE and sets error appropriately in
+ * case of failure. Just returns FALSE otherwise.
+ *
+ * @return TRUE if response contains failure, FALSE otherwise.
+ */
+static gboolean
+vk_error_check (json_t *root, GError **error) {
+
+    if (!json_is_object (root) ) {
+        *error = g_error_new_literal (g_quark_from_static_string (VK_API_DOMAIN_STR),
+                                      -1,
+                                      "Root should be a JSON object");
+        return FALSE;
+    }
+
+    json_t *error_response = json_object_get (root, VK_ERR_JSON_KEY);
+    if (error_response) {
+        json_t *error_message = json_object_get (error_response, VK_ERR_JSON_MSG_KEY);
+        assert (error_message);
+
+        *error = g_error_new_literal (g_quark_from_static_string (VK_API_DOMAIN_STR),
+                                      (gint) json_integer_value (json_object_get (root, VK_ERR_JSON_CODE_KEY)),
+                                      g_strdup (json_string_value (error_message)) );
+        return FALSE;
+    }
+    return TRUE;
+}
+
+static void
+json_error_to_g_error(json_error_t *json_error, GError **error) {
+    *error = g_error_new (
+            g_quark_from_static_string (VK_API_DOMAIN_STR),
+            0,
+            "%s. Line: %d, column %d",
+            json_error->text,
+            json_error->line,
+            json_error->column
+    );
+}
+
+static void
+vk_audio_track_parse (json_t *tracks_array, size_t index_, VkAudioTrack *audio_track) {
+    json_t *json_track;
+
+    json_track = json_array_get (tracks_array, index_);
+
+    // first element may contain number of elements
+    if (0 == index_ && !json_is_object (json_track)) {
+        return;
+    }
+
+    assert (json_is_object (json_track));
+
+    // read data from json
+    audio_track->aid          = (int) json_integer_value (json_object_get (json_track, "aid"));
+    audio_track->artist       = json_string_value (json_object_get (json_track, "artist"));
+    audio_track->duration     = (int) json_integer_value (json_object_get (json_track, "duration"));
+    audio_track->owner_id     = (int) json_integer_value (json_object_get (json_track, "owner_id"));
+    audio_track->title        = json_string_value (json_object_get (json_track, "title"));
+    audio_track->url          = json_string_value (json_object_get (json_track, "url"));
+}
+
+gboolean
+vk_audio_response_parse (const gchar *json,
+                         VkAudioTrackCallback callback,
+                         gpointer userdata,
+                         GError **error) {
+    json_t *root;
+    json_error_t json_error;
+    json_t *tmp_node;
+
+    root = json_loads(json, 0, &json_error);
+
+    if (!root) {
+        trace("Unable to parse audio response: %s\n", json_error.text);
+        json_error_to_g_error (&json_error, error);
+        return FALSE;
+    }
+
+    if (!vk_error_check (root, error)) {
+        trace("Error from VK: %d, %s\n", (*error)->code, (*error)->message);
+        json_decref (root);
+        return FALSE;
+    }
+
+    assert(json_is_object (root));
+    tmp_node = json_object_get (root, "response");
+    assert(json_is_array (tmp_node));
+
+    for (size_t i = 0; i < json_array_size (tmp_node); i++) {
+        VkAudioTrack audio_track;
+        vk_audio_track_parse (tmp_node, i, &audio_track);
+        callback(&audio_track, i, userdata);
+    }
+
+    json_decref (root);
+    return TRUE;
+}
 
 VkAuthData *
 vk_auth_data_parse (const gchar *auth_data_str) {
@@ -39,26 +136,23 @@ vk_auth_data_parse (const gchar *auth_data_str) {
         return NULL ;
     }
     VkAuthData *vk_auth_data = NULL;
-    GError *error;
-    JsonParser *parser = json_parser_new ();
+    json_t *root;
+    json_error_t error;
 
-    if (!json_parser_load_from_data (parser, auth_data_str, strlen (auth_data_str), &error)) {
+    root = json_loads(auth_data_str, 0, &error);
+    if (!root) {
         trace ("VK auth data invalid\n");
-        g_free (error);
-        g_object_unref (parser);
         return NULL;
     }
 
-    if (JSON_NODE_HOLDS_OBJECT (json_parser_get_root (parser))) {
-        JsonObject *root = json_node_get_object (json_parser_get_root (parser));
-
+    if (json_is_object (root)) {
         vk_auth_data = g_malloc (sizeof *vk_auth_data);
-        vk_auth_data->access_token = g_strdup (json_object_get_string_member (root, "access_token"));
-        vk_auth_data->user_id = json_object_get_int_member (root, "user_id");
-        vk_auth_data->expires_in = json_object_get_int_member (root, "expires_in");
+        vk_auth_data->access_token = g_strdup (json_string_value (json_object_get (root, "access_token")));
+        vk_auth_data->user_id = json_integer_value (json_object_get (root, "user_id"));
+        vk_auth_data->expires_in = json_integer_value (json_object_get (root, "expires_in"));
     }
 
-    g_object_unref (parser);
+    json_decref(root);
     return vk_auth_data;
 }
 
@@ -68,99 +162,4 @@ vk_auth_data_free (VkAuthData *vk_auth_data) {
         g_free ((gchar *) vk_auth_data->access_token);
         g_free (vk_auth_data);
     }
-}
-
-static void
-vk_audio_track_parse (JsonArray *array, guint index_, JsonNode *element_node, gpointer userdata) {
-    _VkAudioParseParams *parse_params;
-    JsonObject *json_track;
-    VkAudioTrack audio_track;
-
-    parse_params = (_VkAudioParseParams *) userdata;
-
-    // first element may contain number of elements
-    if (0 == index_
-            && JSON_NODE_VALUE == json_node_get_node_type(element_node)) {
-        return;
-    }
-
-    assert(JSON_NODE_HOLDS_OBJECT (element_node));
-    json_track = json_node_get_object(element_node);
-
-    // read data from json
-    audio_track.aid            = json_object_get_int_member (json_track, "aid");
-    audio_track.artist        = json_object_get_string_member (json_track, "artist");
-    audio_track.duration     = json_object_get_int_member (json_track, "duration");
-    audio_track.owner_id    = json_object_get_int_member (json_track, "owner_id");
-    audio_track.title        = json_object_get_string_member (json_track, "title");
-    audio_track.url            = json_object_get_string_member (json_track, "url");
-
-    parse_params->callback(&audio_track, index_, parse_params->callback_userdata);
-}
-
-gboolean
-vk_audio_response_parse (const gchar *json,
-                         VkAudioTrackCallback callback,
-                         gpointer userdata,
-                         GError **error) {
-    JsonParser *parser;
-    JsonNode *root;
-    JsonArray *tracks;
-    JsonObject *tmp_obj;
-    JsonNode *tmp_node;
-    _VkAudioParseParams parse_params;
-
-    parse_params.callback = callback;
-    parse_params.callback_userdata = userdata;
-
-    parser = json_parser_new();
-
-    if (!json_parser_load_from_data(parser, json, -1, error)) {
-        trace("Unable to parse audio response: %s\n", (*error)->message);
-        g_object_unref(parser);
-        return FALSE;
-    }
-
-    if (!vk_error_check(parser, error)) {
-        trace("Error from VK: %d, %s\n", (*error)->code, (*error)->message);
-        g_object_unref(parser);
-        return FALSE;
-    }
-
-    root = json_parser_get_root(parser);
-
-    assert(JSON_NODE_HOLDS_OBJECT (root));
-    tmp_obj = json_node_get_object(root);
-    tmp_node = json_object_get_member(tmp_obj, "response");
-    assert(JSON_NODE_HOLDS_ARRAY (tmp_node));
-
-    tracks = json_node_get_array(tmp_node);
-    json_array_foreach_element(tracks, vk_audio_track_parse, &parse_params);
-
-    g_object_unref(parser);
-    return TRUE;
-}
-
-gboolean
-vk_error_check (JsonParser *parser, GError **error) {
-    JsonNode *root = json_parser_get_root (parser);
-
-    if (!JSON_NODE_HOLDS_OBJECT (root) ) {
-        *error = g_error_new_literal (g_quark_from_static_string (VK_API_DOMAIN_STR),
-                                      -1,
-                                      "Root should be a JSON object");
-        return FALSE;
-    }
-
-    JsonObject * rootObj = json_node_get_object (root);
-    if (json_object_has_member (rootObj, VK_ERR_JSON_KEY) ) {
-        rootObj = json_object_get_object_member (rootObj, VK_ERR_JSON_KEY);
-        assert (json_object_has_member (rootObj, VK_ERR_JSON_MSG_KEY) );
-
-        *error = g_error_new_literal (g_quark_from_static_string (VK_API_DOMAIN_STR),
-                                      json_object_get_int_member (rootObj, VK_ERR_JSON_CODE_KEY),
-                                      g_strdup (json_object_get_string_member (rootObj, VK_ERR_JSON_MSG_KEY) ) );
-        return FALSE;
-    }
-    return TRUE;
 }
