@@ -14,11 +14,6 @@
           var kv = params[i].split('=');
           po[kv[0]] = kv[1];
         }
-        var str = "{ "
-        str += "'access_token': '" + po.access_token + "', ";
-        str += "'expires_in': " + po.expires_in + ", ";
-        str += "'user_id': " + po.user_id;
-        str += " }";
-        document.getElementById('vk_token').value += str;
+        document.getElementById('vk_token').value += JSON.stringify(po);
 </script>
 
