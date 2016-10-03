@@ -26,6 +26,7 @@ static intptr_t http_tid;    // thread for communication
 
 typedef struct {
     const gchar *query;
+    glong id; // user or group id
     GtkTreeModel *store;
 } SearchQuery;
 
@@ -38,10 +39,11 @@ typedef struct {
 // URL formatting strings
 #define MAX_URL_LEN         300
 #define VK_AUDIO_GET        VK_API_METHOD_AUDIO_GET "?access_token=%s"
-#define VK_AUDIO_GET_BY     VK_API_METHOD_AUDIO_GET "?access_token=%s&owner_id=%s"
+#define VK_AUDIO_GET_BY     VK_API_METHOD_AUDIO_GET "?access_token=%s&owner_id=%ld"
 #define VK_AUDIO_GET_BY_ID  VK_API_METHOD_AUDIO_GET_BY_ID "?access_token=%s&audios=%d_%d"
 #define VK_AUDIO_SEARCH     VK_API_METHOD_AUDIO_SEARCH "?access_token=%s&count=%d&offset=%d&q=%s"
 #define VK_AUDIO_GET_RECOMMENDATIONS     VK_API_METHOD_AUDIO_GET_RECOMMENDATIONS "?access_token=%s&count=%d&offset=%d"
+#define VK_UTILS_RESOLVE_SCREEN_NAME     VK_API_METHOD_UTILS_RESOLVE_SCREEN_NAME "?access_token=%s&screen_name=%s"
 
 // deadbeef config keys
 #define CONF_VK_AUTH_URL "vk.auth.url"
@@ -154,11 +156,8 @@ vk_search_filter_matches (const gchar *search_query, VkAudioTrack *track) {
 }
 
 static void
-parse_audio_track_callback (VkAudioTrack *track, size_t index, gpointer userdata) {
-    SearchQuery *query;
+parse_audio_track_callback(VkAudioTrack *track, size_t index, SearchQuery *query) {
     GtkTreeIter iter;
-
-    query = (SearchQuery *) userdata;
 
     if (vk_search_filter_matches (query->query, track)
             && !vk_tree_model_has_track (query->store, track)) {
@@ -185,7 +184,7 @@ parse_audio_resp (SearchQuery *query, const gchar *resp_str) {
     GError *error;
 
     gdk_threads_enter ();
-    if (!vk_audio_response_parse (resp_str, parse_audio_track_callback, query, &error)) {
+    if (!vk_audio_response_parse (resp_str, (VkAudioTrackCallback) parse_audio_track_callback, query, &error)) {
         show_message(GTK_MESSAGE_ERROR, error->message);
         g_error_free (error);
     }
@@ -315,7 +314,7 @@ vk_get_my_music_thread_func (void *ctx) {
 }
 
 static void
-vk_get_suggested_music_thread_func (void *ctx) {
+vk_get_recommended_music_thread_func(void *ctx) {
     SearchQuery query;
     gint rows_added;
     gint iteration = 0;
@@ -342,13 +341,10 @@ vk_get_by_music_thread_func (SearchQuery *query) {
     char method_url[MAX_URL_LEN];
     curl = curl_easy_init ();
 
-    char *escaped_search_str = curl_easy_escape (curl, query->query, 0);
-    sprintf (method_url, VK_AUDIO_GET_BY, vk_auth_data->access_token, (gchar *) query->query);
+    sprintf (method_url, VK_AUDIO_GET_BY, vk_auth_data->access_token, query->id);
     vk_send_audio_request_and_parse_response (method_url, query);
 
-    g_free (escaped_search_str);
     curl_easy_cleanup (curl);
-    g_free ((gchar *) query->query);
     g_free (query);
     http_tid = 0;
 }
@@ -370,6 +366,66 @@ vk_ddb_set_config_var (const char *key, GValue *value) {
     }
 }
 
+/**
+ * Try to detect if search_text is a known vk.com link and configure `query` correspondingly.
+ *
+ * There are three possible outcomes - link to a user profile, link to a group or (fallback option) just
+ * regular query text.
+ */
+static void
+vk_detect_search_target(const gchar *search_text, SearchQuery *query) {
+    const gchar *remains = NULL;
+    gchar url[MAX_URL_LEN];
+    gchar *resp_str;
+    GError *error = NULL;
+
+    query->query = NULL;
+
+    // try to find of know vk.com prefixes in search string
+    for (gint i = 0; remains == NULL && VK_PUBLIC_SITE_PREFIXES[i] != NULL; i++) {
+        remains = strip_prefix (search_text, VK_PUBLIC_SITE_PREFIXES[i]);
+    }
+    if (remains == NULL) {
+        // not a vk.com url, fallback to plain search
+        query->query = g_strdup (search_text);
+        return;
+    }
+
+    // ok, it is an vk.com url indeed! an object may be identified with ID or a string alias
+    if (g_str_has_prefix (remains, "id")) {
+        query->id = strtol (remains + 2, NULL, 10);
+        trace("Searched URL containing user id=%ld\n", query->id);
+        return;
+
+    } else if (g_str_has_prefix (remains, "club")) {
+        query->id = -1 * strtol (remains + 4, NULL, 10);
+        trace("Searched URL containing group id=%ld\n", query->id);
+        return;
+    }
+
+    // else this is an alias
+    trace("Searched URL containing name alias=%s\n", remains);
+    sprintf (url, VK_UTILS_RESOLVE_SCREEN_NAME, vk_auth_data->access_token, remains);
+    resp_str = http_get_string (url, &error);
+    if (NULL == resp_str) {
+        trace ("VK error: %s\n", error->message);
+        query->query = g_strdup (search_text);
+        g_error_free (error);
+        return;
+
+    } else {
+        glong id = vk_utils_resolve_screen_name_parse (resp_str, &error);
+        if (!id) {
+            trace("Unknown object type under alias %s\n", remains);
+            query->query = g_strdup (search_text);
+            g_error_free (error);
+        } else {
+            query->id = id;
+        }
+        g_free (resp_str);
+    }
+}
+
 void
 vk_search_music (const gchar *query_text, GtkTreeModel *liststore) {
     SearchQuery *query;
@@ -383,29 +439,15 @@ vk_search_music (const gchar *query_text, GtkTreeModel *liststore) {
     trace("== Searching for %s\n", query_text);
 
     query = g_malloc (sizeof(SearchQuery));
-    query->query = g_strdup (query_text);
     query->store = liststore;
+    // TODO the below func performs http rq, need to call it in separate thread
+    vk_detect_search_target (query_text, query);
 
-    http_tid = deadbeef->thread_start ((DB_thread_func_t) vk_search_audio_thread_func, query);
-}
-
-void
-vk_get_by_music (const gchar *query_text, GtkTreeModel *liststore) {
-    SearchQuery *query;
-
-    if (http_tid) {
-        trace("Killing http thread\n");
-        deadbeef->thread_detach (http_tid);
-
-        http_tid = 0;
+    if (query->query == NULL) {
+        http_tid = deadbeef->thread_start ((DB_thread_func_t) vk_get_by_music_thread_func, query);
+    } else {
+        http_tid = deadbeef->thread_start ((DB_thread_func_t) vk_search_audio_thread_func, query);
     }
-    trace("== Searching for %s\n", query_text);
-
-    query = g_malloc (sizeof(SearchQuery));
-    query->query = g_strdup (query_text);
-    query->store = liststore;
-
-    http_tid = deadbeef->thread_start ((DB_thread_func_t) vk_get_by_music_thread_func, query);
 }
 
 void
@@ -422,16 +464,16 @@ vk_get_my_music (GtkTreeModel *liststore) {
 }
 
 void
-vk_get_suggested_music (GtkTreeModel *liststore) {
+vk_get_recommended_music (GtkTreeModel *liststore) {
     if (http_tid) {
         trace("Killing http thread\n");
         deadbeef->thread_detach (http_tid);
 
         http_tid = 0;
     }
-    trace("== Getting my music, uid=%d\n", vk_auth_data->user_id);
+    trace("== Getting my music, uid=%ld\n", vk_auth_data->user_id);
 
-    http_tid = deadbeef->thread_start (vk_get_suggested_music_thread_func, liststore);
+    http_tid = deadbeef->thread_start (vk_get_recommended_music_thread_func, liststore);
 }
 
 static ddb_gtkui_widget_t *

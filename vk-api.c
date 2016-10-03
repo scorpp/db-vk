@@ -70,7 +70,7 @@ json_error_to_g_error(json_error_t *json_error, GError **error) {
     );
 }
 
-static void
+static gboolean
 vk_audio_track_parse (json_t *tracks_array, size_t index_, VkAudioTrack *audio_track) {
     json_t *json_track;
 
@@ -78,7 +78,7 @@ vk_audio_track_parse (json_t *tracks_array, size_t index_, VkAudioTrack *audio_t
 
     // first element may contain number of elements
     if (0 == index_ && !json_is_object (json_track)) {
-        return;
+        return FALSE;
     }
 
     assert (json_is_object (json_track));
@@ -90,6 +90,8 @@ vk_audio_track_parse (json_t *tracks_array, size_t index_, VkAudioTrack *audio_t
     audio_track->owner_id     = (int) json_integer_value (json_object_get (json_track, "owner_id"));
     audio_track->title        = json_string_value (json_object_get (json_track, "title"));
     audio_track->url          = json_string_value (json_object_get (json_track, "url"));
+
+    return TRUE;
 }
 
 gboolean
@@ -121,8 +123,9 @@ vk_audio_response_parse (const gchar *json,
 
     for (size_t i = 0; i < json_array_size (tmp_node); i++) {
         VkAudioTrack audio_track;
-        vk_audio_track_parse (tmp_node, i, &audio_track);
-        callback(&audio_track, i, userdata);
+        if (vk_audio_track_parse (tmp_node, i, &audio_track)) {
+            callback (&audio_track, i, userdata);
+        }
     }
 
     json_decref (root);
@@ -162,4 +165,45 @@ vk_auth_data_free (VkAuthData *vk_auth_data) {
         g_free ((gchar *) vk_auth_data->access_token);
         g_free (vk_auth_data);
     }
+}
+
+glong
+vk_utils_resolve_screen_name_parse (const gchar *json, GError **error) {
+    json_error_t json_error;
+    json_t *root;
+    json_t *response;
+    glong id = 0;
+
+    root = json_loads (json, 0, &json_error);
+    if (!root) {
+        trace("Unable to parse audio response: %s\n", json_error.text);
+        json_error_to_g_error (&json_error, error);
+        return FALSE;
+    }
+
+    if (!vk_error_check (root, error)) {
+        trace("Error from VK: %d, %s\n", (*error)->code, (*error)->message);
+        json_decref (root);
+        return FALSE;
+    }
+
+    assert(json_is_object (root));
+    response = json_object_get (root, "response");
+    if (!json_is_object (response)) {
+        trace("Screen name was not found\n");
+    } else {
+        const char *object_type = json_string_value (json_object_get (response, "type"));
+        const long object_id = json_integer_value (json_object_get (response, "object_id"));
+
+        if (g_strcmp0 (object_type, "user") == 0) {
+            id = object_id;
+        } else if (g_strcmp0 (object_type, "group") == 0) {
+            id = -object_id;
+        } else {
+            trace("Unexpected object type: %s\n", json);
+        }
+    }
+
+    json_decref (root);
+    return id;
 }

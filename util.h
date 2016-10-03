@@ -24,5 +24,10 @@ gchar *http_get_string (const gchar *url, GError **error);
  */
 char *repl_str(const char *str, const char *from, const char *to);
 
+/**
+ * @return pointer to a position in haystack right after prefix or NULL.
+ */
+const gchar *strip_prefix (const gchar *haystack, const gchar *prefix);
+
 G_END_DECLS
 #endif //DB_VK_UTIL_H

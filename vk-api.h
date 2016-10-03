@@ -19,6 +19,15 @@ G_BEGIN_DECLS
 #define VK_API_METHOD_AUDIO_GET_BY_ID VK_API_URL "/audio.getById"
 /** Retrieve 'Suggested music' contents */
 #define VK_API_METHOD_AUDIO_GET_RECOMMENDATIONS VK_API_URL "/audio.getRecommendations"
+/** Resolve vk.com object by screen name (alias) */
+#define VK_API_METHOD_UTILS_RESOLVE_SCREEN_NAME VK_API_URL "/utils.resolveScreenName"
+
+/** Prefixes of vk.com public site links. */
+static const gchar *VK_PUBLIC_SITE_PREFIXES[] = {
+        "https://vk.com/",
+        "http://vk.com/",
+        NULL
+};
 
 typedef struct {
     const gchar *access_token;
@@ -71,6 +80,13 @@ gboolean        vk_audio_response_parse (const gchar *json,
                                          gpointer userdata,
                                          GError **error);
 
+/**
+ * Parse response of VK_API_METHOD_UTILS_RESOLVE_SCREEN_NAME method.
+ *
+ * @return a positive or negative or zero value if object type is user, group or other.
+ */
+glong           vk_utils_resolve_screen_name_parse (const gchar *json,
+                                                    GError **error);
 
 G_END_DECLS
 #endif /* VK_API_H_ */

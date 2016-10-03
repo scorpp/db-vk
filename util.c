@@ -143,3 +143,12 @@ repl_str(const char *str, const char *from, const char *to) {
     free(pos_cache);
     return ret;
 }
+
+
+const gchar *
+strip_prefix(const gchar *haystack, const gchar *needle) {
+    if (g_str_has_prefix (haystack, needle)) {
+        return haystack + strlen (needle);
+    }
+    return NULL;
+}
