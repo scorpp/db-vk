@@ -17,7 +17,8 @@ G_BEGIN_DECLS
 #define VK_API_METHOD_AUDIO_GET VK_API_URL "/audio.get"
 /** Retrieve details of a track by it's ID */
 #define VK_API_METHOD_AUDIO_GET_BY_ID VK_API_URL "/audio.getById"
-
+/** Retrieve 'Suggested music' contents */
+#define VK_API_METHOD_AUDIO_GET_RECOMMENDATIONS VK_API_URL "/audio.getRecommendations"
 
 typedef struct {
     const gchar *access_token;

@@ -22,6 +22,8 @@ extern ddb_gtkui_t *gtkui_plugin;
 void vk_add_tracks_from_tree_model_to_playlist (GtkTreeModel *treemodel, GList *gtk_tree_path_list, const char *plt_name);
 void vk_search_music (const gchar *query_text, GtkListStore *liststore);
 void vk_get_my_music (GtkTreeModel *liststore);
+void vk_get_by_music (const gchar *query_text, GtkListStore *liststore);
+void vk_get_suggested_music (GtkTreeModel *liststore);
 void vk_ddb_set_config_var (const char *key, GValue *value);
 
 /**
@@ -69,7 +71,7 @@ add_to_playlist (GtkTreeView *tree_view, const char *playlist) {
 
     vk_add_tracks_from_tree_model_to_playlist (treemodel, selected_rows, playlist);
 
-    g_list_free (selected_rows);    
+    g_list_free (selected_rows);
 }
 
 static void
@@ -142,7 +144,7 @@ show_popup_menu (GtkTreeView *treeview, GdkEventButton *event) {
     item = gtk_menu_item_new_with_label (label_buf);
     g_signal_connect (item, "activate", G_CALLBACK (on_menu_item_add_to_new_playlist), treeview);
     gtk_menu_shell_append (GTK_MENU_SHELL (menu), item);
-        
+
     item = gtk_menu_item_new_with_label ("Add to current playlist");
     g_signal_connect (item, "activate", G_CALLBACK (on_menu_item_add_to_playlist), treeview);
     gtk_menu_shell_append (GTK_MENU_SHELL (menu), item);
@@ -215,6 +217,36 @@ on_my_music (GtkWidget *widget, gpointer *data) {
 }
 
 static void
+on_suggested_music (GtkWidget *widget, gpointer *data) {
+    gtk_widget_set_sensitive (widget, FALSE);
+
+    last_search_query = NULL;
+    gtk_list_store_clear (GTK_LIST_STORE (data));
+    vk_get_suggested_music (GTK_TREE_MODEL (data));
+
+    gtk_widget_set_sensitive (widget, TRUE);
+}
+
+static void
+on_by (GtkWidget *widget, gpointer data) {
+    gtk_widget_set_sensitive (widget, FALSE);
+
+    const gchar *query_text = gtk_entry_get_text (GTK_ENTRY (widget));
+
+    // refresh last search query
+    if (last_search_query != NULL) {
+        g_free ((gchar*) last_search_query);
+    }
+    last_search_query = g_strdup (query_text);
+
+    gtk_list_store_clear (GTK_LIST_STORE (data));
+    vk_get_by_music (query_text, GTK_LIST_STORE (data));
+
+    gtk_widget_set_sensitive (widget, TRUE);
+    gtk_widget_grab_focus (widget);
+}
+
+static void
 on_filter_duplicates (GtkWidget *widget, gpointer *data) {
     vk_search_opts.filter_duplicates = gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON (widget));
 }
@@ -243,11 +275,14 @@ vk_create_browser_widget_content () {
     GtkWidget *scroll_window;
     GtkWidget *search_hbox;
     GtkWidget *search_text;
+    GtkWidget *by_hbox;
+    GtkWidget *by_id;
     GtkWidget *search_target;
     GtkWidget *search_results;
     GtkListStore *list_store;
     GtkWidget *bottom_hbox;
     GtkWidget *my_music_button;
+    GtkWidget *recommendations_button;
     GtkWidget *filter_duplicates;
     GtkWidget *search_whole_phrase;
 
@@ -339,6 +374,20 @@ vk_create_browser_widget_content () {
     my_music_button = gtk_button_new_with_label ("My music");
     g_signal_connect (my_music_button, "clicked", G_CALLBACK (on_my_music), list_store);
     gtk_box_pack_start (GTK_BOX (bottom_hbox), my_music_button, FALSE, FALSE, 0);
+
+    recommendations_button = gtk_button_new_with_label ("Suggested music");
+    g_signal_connect (recommendations_button, "clicked", G_CALLBACK (on_suggested_music), list_store);
+    gtk_box_pack_start (GTK_BOX (bottom_hbox), recommendations_button, FALSE, FALSE, 0);
+
+    by_hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
+    gtk_box_pack_start (GTK_BOX (dlg_vbox), by_hbox, FALSE, FALSE, 0);
+
+    by_id = gtk_entry_new ();
+    gtk_widget_show (by_id);
+    g_signal_connect(by_id, "activate", G_CALLBACK (on_by), list_store);
+    gtk_box_pack_start (GTK_BOX (by_hbox), by_id, TRUE, TRUE, 0);
+
+    search_target = gtk_combo_box_text_new ();
 
     filter_duplicates = gtk_check_button_new_with_label ("Filter duplicates");
     gtk_widget_set_tooltip_text (filter_duplicates, "When checked removes duplicates during next search");

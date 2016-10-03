@@ -32,14 +32,16 @@ typedef struct {
 #define VK_AUTH_APP_ID "3035566"
 #define VK_AUTH_REDIR_URL "http://scorpp.github.io/db-vk/vk-id.html"
 #define VK_AUTH_URL "http://oauth.vkontakte.ru/authorize?client_id=" VK_AUTH_APP_ID \
-        "&scope=audio,friends,offline&redirect_uri=" VK_AUTH_REDIR_URL \
+        "&scope=audio,friends,groups,offline&redirect_uri=" VK_AUTH_REDIR_URL \
         "&response_type=token"
 
 // URL formatting strings
 #define MAX_URL_LEN         300
 #define VK_AUDIO_GET        VK_API_METHOD_AUDIO_GET "?access_token=%s"
+#define VK_AUDIO_GET_BY     VK_API_METHOD_AUDIO_GET "?access_token=%s&owner_id=%s"
 #define VK_AUDIO_GET_BY_ID  VK_API_METHOD_AUDIO_GET_BY_ID "?access_token=%s&audios=%d_%d"
 #define VK_AUDIO_SEARCH     VK_API_METHOD_AUDIO_SEARCH "?access_token=%s&count=%d&offset=%d&q=%s"
+#define VK_AUDIO_GET_RECOMMENDATIONS     VK_API_METHOD_AUDIO_GET_RECOMMENDATIONS "?access_token=%s&count=%d&offset=%d"
 
 // deadbeef config keys
 #define CONF_VK_AUTH_URL "vk.auth.url"
@@ -200,7 +202,7 @@ vk_add_tracks_from_tree_model_to_playlist (GtkTreeModel *treemodel, GList *gtk_t
         plt = deadbeef->plt_get_for_idx (idx);
     } else {
         plt = deadbeef->plt_get_curr ();
-    }        
+    }
 
     if (!deadbeef->plt_add_files_begin (plt, 0)) {
         DB_playItem_t *last = deadbeef->plt_get_last (plt, 0);
@@ -312,6 +314,45 @@ vk_get_my_music_thread_func (void *ctx) {
     http_tid = 0;
 }
 
+static void
+vk_get_suggested_music_thread_func (void *ctx) {
+    SearchQuery query;
+    gint rows_added;
+    gint iteration = 0;
+    query.query = NULL,
+    query.store = GTK_TREE_MODEL (ctx);
+    do {
+        char method_url[MAX_URL_LEN];
+
+        rows_added = gtk_tree_model_iter_n_children (query.store, NULL);
+        sprintf (method_url,
+                 VK_AUDIO_GET_RECOMMENDATIONS,
+                 vk_auth_data->access_token,
+                 VK_AUDIO_MAX_TRACKS,
+                 VK_AUDIO_MAX_TRACKS * iteration);
+        vk_send_audio_request_and_parse_response (method_url, &query);
+        rows_added = gtk_tree_model_iter_n_children (query.store, NULL) - rows_added;
+    } while (++iteration < 10 && rows_added > 0);
+    http_tid = 0;
+}
+
+static void
+vk_get_by_music_thread_func (SearchQuery *query) {
+    CURL *curl;
+    char method_url[MAX_URL_LEN];
+    curl = curl_easy_init ();
+
+    char *escaped_search_str = curl_easy_escape (curl, query->query, 0);
+    sprintf (method_url, VK_AUDIO_GET_BY, vk_auth_data->access_token, (gchar *) query->query);
+    vk_send_audio_request_and_parse_response (method_url, query);
+
+    g_free (escaped_search_str);
+    curl_easy_cleanup (curl);
+    g_free ((gchar *) query->query);
+    g_free (query);
+    http_tid = 0;
+}
+
 void
 vk_ddb_set_config_var (const char *key, GValue *value) {
     if (G_VALUE_HOLDS_INT (value)) {
@@ -349,6 +390,25 @@ vk_search_music (const gchar *query_text, GtkTreeModel *liststore) {
 }
 
 void
+vk_get_by_music (const gchar *query_text, GtkTreeModel *liststore) {
+    SearchQuery *query;
+
+    if (http_tid) {
+        trace("Killing http thread\n");
+        deadbeef->thread_detach (http_tid);
+
+        http_tid = 0;
+    }
+    trace("== Searching for %s\n", query_text);
+
+    query = g_malloc (sizeof(SearchQuery));
+    query->query = g_strdup (query_text);
+    query->store = liststore;
+
+    http_tid = deadbeef->thread_start ((DB_thread_func_t) vk_get_by_music_thread_func, query);
+}
+
+void
 vk_get_my_music (GtkTreeModel *liststore) {
     if (http_tid) {
         trace("Killing http thread\n");
@@ -359,6 +419,19 @@ vk_get_my_music (GtkTreeModel *liststore) {
     trace("== Getting my music, uid=%ld\n", vk_auth_data->user_id);
 
     http_tid = deadbeef->thread_start (vk_get_my_music_thread_func, liststore);
+}
+
+void
+vk_get_suggested_music (GtkTreeModel *liststore) {
+    if (http_tid) {
+        trace("Killing http thread\n");
+        deadbeef->thread_detach (http_tid);
+
+        http_tid = 0;
+    }
+    trace("== Getting my music, uid=%d\n", vk_auth_data->user_id);
+
+    http_tid = deadbeef->thread_start (vk_get_suggested_music_thread_func, liststore);
 }
 
 static ddb_gtkui_widget_t *
