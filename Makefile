@@ -6,12 +6,12 @@ GTK2_CFLAGS?=$(shell pkg-config --cflags gtk+-2.0 --silence-errors)
 GTK2_LIBS?=$(shell pkg-config --libs gtk+-2.0 --silence-errors)
 GTK3_CFLAGS?=$(shell pkg-config --cflags gtk+-3.0 --silence-errors)
 GTK3_LIBS?=$(shell pkg-config --libs gtk+-3.0 --silence-errors)
-JSON_GLIB_CFLAGS?=`pkg-config --cflags json-glib-1.0`
-JSON_GLIB_LIBS?=`pkg-config --libs json-glib-1.0`
+JANSSON_CFLAGS?=`pkg-config --cflags jansson`
+JANSSON_LIBS?=`pkg-config --libs jansson`
 CURL_CFLAGS?=`pkg-config --cflags libcurl`
 CURL_LIBS?=`pkg-config --libs libcurl`
-CFLAGS+=-Wall -fPIC -D_GNU_SOURCE -g -O0 -std=c99 $(JSON_GLIB_CFLAGS) $(CURL_CFLAGS)
-LDFLAGS+=-shared $(JSON_GLIB_LIBS) $(CURL_LIBS) -lssl
+CFLAGS+=-Wall -fPIC -D_GNU_SOURCE -g -O0 -std=c99 $(JANSSON_CFLAGS) $(CURL_CFLAGS)
+LDFLAGS+=-shared $(JANSSON_LIBS) $(CURL_LIBS) -lssl
 SOURCES=ui.c util.c vk-api.c vkontakte.c
 
 OBJECTS_GTK2=$(SOURCES:.c=_gtk2.o)
