@@ -2,8 +2,8 @@ project(DB_VK)
 cmake_minimum_required(VERSION 2.6)
 
 # Build both by default
-option(WITH_GTK2 "Build GTK2 version" ON)
-option(WITH_GTK3 "Build GTK3 version" ON)
+option(WITH_GTK2 "Build GTK2 version")
+option(WITH_GTK3 "Build GTK3 version")
 
 find_package(CURL REQUIRED)
 find_package(PkgConfig REQUIRED)
@@ -31,8 +31,12 @@ if (CMAKE_PRIOR_TO_2_8_10 AND WITH_GTK2 AND WITH_GTK3)
 endif()
 
 
-if (WITH_GTK2)
-	pkg_check_modules(GTK2 REQUIRED gtk+-2.0)
+pkg_check_modules(GTK2 REQUIRED gtk+-2.0)
+if (WITH_GTK2 AND NOT GTK2_FOUND)
+	message(FATAL_ERROR "GTK2 development files are not installed")
+endif ()
+
+if (GTK2_FOUND)
 	add_library(vkontakte_gtk2 SHARED vkontakte.c vk-api.c ui.c util.c)
 	target_link_libraries(vkontakte_gtk2 ${GTK2_LIBRARIES} ${CURL_LIBRARIES} ${JANSSON_LIBRARIES})
 	
@@ -49,8 +53,12 @@ if (WITH_GTK2)
 	install(TARGETS vkontakte_gtk2 DESTINATION "lib${LIB_SUFFIX}/deadbeef")
 endif ()
 
-if (WITH_GTK3)
-	pkg_check_modules(GTK3 REQUIRED gtk+-3.0)
+pkg_check_modules(GTK3 gtk+-3.0)
+if (WITH_GTK3 AND NOT GTK3_FOUND)
+    message(FATAL_ERROR "GTK3 development files are not installed")
+endif ()
+
+if (GTK3_FOUND)
 	add_library(vkontakte_gtk3 SHARED vkontakte.c vk-api.c ui.c util.c)
 	target_link_libraries(vkontakte_gtk3 ${GTK3_LIBRARIES} ${CURL_LIBRARIES} ${JANSSON_LIBRARIES})
         
@@ -67,6 +75,9 @@ if (WITH_GTK3)
 	install(TARGETS vkontakte_gtk3 DESTINATION "lib${LIB_SUFFIX}/deadbeef")
 endif ()
 
+if (!GTK2_FOUND AND !GTK3_FOUND)
+	message(FATAL_ERROR "Either GTK2 or GTK3 required")
+endif ()
 
 # Configure packaging
 set(CPACK_PROJECT_CONFIG_FILE ${PROJECT_SOURCE_DIR}/CMakeCPackOptions.cmake) 
