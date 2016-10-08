@@ -17,6 +17,7 @@ include_directories(${DB_VK_SOURCE_DIR})
 
 set(CMAKE_C_FLAGS "-g -Wall")
 
+file(GLOB VK_PLUGIN_SRC "*.h" "*.c")
 
 # Older versions of cmake does not support modifying INCLUDE_DIRECTORIES for a target
 # by means of SET_TARGET_PROPERTIES command
@@ -37,7 +38,7 @@ if (WITH_GTK2 AND NOT GTK2_FOUND)
 endif ()
 
 if (GTK2_FOUND)
-	add_library(vkontakte_gtk2 SHARED vkontakte.c vk-api.c ui.c util.c)
+	add_library(vkontakte_gtk2 SHARED ${VK_PLUGIN_SRC})
 	target_link_libraries(vkontakte_gtk2 ${GTK2_LIBRARIES} ${CURL_LIBRARIES} ${JANSSON_LIBRARIES})
 	
 	if (CMAKE_PRIOR_TO_2_8_10)
@@ -59,7 +60,7 @@ if (WITH_GTK3 AND NOT GTK3_FOUND)
 endif ()
 
 if (GTK3_FOUND)
-	add_library(vkontakte_gtk3 SHARED vkontakte.c vk-api.c ui.c util.c)
+	add_library(vkontakte_gtk3 SHARED ${VK_PLUGIN_SRC})
 	target_link_libraries(vkontakte_gtk3 ${GTK3_LIBRARIES} ${CURL_LIBRARIES} ${JANSSON_LIBRARIES})
         
     if (CMAKE_PRIOR_TO_2_8_10)

@@ -10,20 +10,14 @@
 #include <string.h>
 
 #include "ui.h"
+#include "core.h"
 #include "common-defs.h"
 #include "gtk_compat.h"
 
 
-const gchar *last_search_query = NULL;
+static const gchar *last_search_query = NULL;
 extern ddb_gtkui_t *gtkui_plugin;
 
-
-// vkontakte.c
-void vk_add_tracks_from_tree_model_to_playlist (GtkTreeModel *treemodel, GList *gtk_tree_path_list, const char *plt_name);
-void vk_search_music (const gchar *query_text, GtkListStore *liststore);
-void vk_get_my_music (GtkTreeModel *liststore);
-void vk_get_recommended_music (GtkTreeModel *liststore);
-void vk_ddb_set_config_var (const char *key, GValue *value);
 
 /**
  * Handler for various search-affecting controls that would trigger search again if needed.
@@ -56,7 +50,7 @@ save_active_property_value_to_config (GtkWidget *widget, gpointer data) {
     }
 
     g_object_get_property (G_OBJECT (widget), "active", &value);
-    vk_ddb_set_config_var ((const gchar *) data, &value);
+    vk_set_config_var ((const gchar *) data, &value);
 }
 
 static void
@@ -210,7 +204,7 @@ on_my_music (GtkWidget *widget, gpointer *data) {
 
     last_search_query = NULL;
     gtk_list_store_clear (GTK_LIST_STORE (data));
-    vk_get_my_music (GTK_TREE_MODEL (data));
+    vk_get_my_music (GTK_LIST_STORE (data));
 
     gtk_widget_set_sensitive (widget, TRUE);
 }
@@ -221,7 +215,7 @@ on_suggested_music (GtkWidget *widget, gpointer *data) {
 
     last_search_query = NULL;
     gtk_list_store_clear (GTK_LIST_STORE (data));
-    vk_get_recommended_music (GTK_TREE_MODEL (data));
+    vk_get_recommended_music (GTK_LIST_STORE (data));
 
     gtk_widget_set_sensitive (widget, TRUE);
 }
@@ -238,7 +232,7 @@ on_whole_phrase_search (GtkWidget *widget, gpointer *data) {
 
 static void
 on_search_target_changed (GtkWidget *widget, gpointer *data) {
-    vk_search_opts.search_target = gtk_combo_box_get_active( GTK_COMBO_BOX (widget));
+    vk_search_opts.search_target = (VkSearchTarget) gtk_combo_box_get_active(GTK_COMBO_BOX (widget));
 }
 
 static GtkCellRenderer *

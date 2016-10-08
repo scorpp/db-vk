@@ -28,6 +28,11 @@
 #define VK_ERR_JSON_MSG_KEY     "error_msg"
 #define VK_ERR_JSON_EXTRA_KEY   "request_params"
 
+const gchar *VK_PUBLIC_SITE_PREFIXES[] = {
+        "https://vk.com/",
+        "http://vk.com/",
+        NULL
+};
 
 /**
  * Checks if response contains error, returns TRUE and sets error appropriately in

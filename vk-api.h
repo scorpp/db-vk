@@ -23,11 +23,7 @@ G_BEGIN_DECLS
 #define VK_API_METHOD_UTILS_RESOLVE_SCREEN_NAME VK_API_URL "/utils.resolveScreenName"
 
 /** Prefixes of vk.com public site links. */
-static const gchar *VK_PUBLIC_SITE_PREFIXES[] = {
-        "https://vk.com/",
-        "http://vk.com/",
-        NULL
-};
+extern const gchar *VK_PUBLIC_SITE_PREFIXES[];
 
 typedef struct {
     const gchar *access_token;

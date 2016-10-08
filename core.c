@@ -1,56 +1,47 @@
-// disable gdk_thread_enter\leave warnings
-#define GDK_VERSION_MIN_REQUIRED GDK_VERSION_3_4
 
-#define DDB_WARN_DEPRECATED 1
-#define DDB_API_LEVEL 6
-
-#include <gtk/gtk.h>
-#include <deadbeef/deadbeef.h>
-#include <deadbeef/gtkui_api.h>
-#include <stdlib.h>
+#include <malloc.h>
 #include <string.h>
+#include <stdlib.h>
 #include <curl/curl.h>
+#include <gtk/gtk.h>
 
+#include "core.h"
 #include "common-defs.h"
-#include "util.h"
 #include "vk-api.h"
 #include "ui.h"
+#include "util.h"
 
-DB_functions_t *deadbeef;
+
+// URL formatting strings
+#define MAX_URL_LEN         300
+#define VK_AUDIO_GET                    VK_API_METHOD_AUDIO_GET "?access_token=%s"
+#define VK_AUDIO_GET_BY_OWNER           VK_API_METHOD_AUDIO_GET "?access_token=%s&owner_id=%ld"
+#define VK_AUDIO_GET_BY_ID              VK_API_METHOD_AUDIO_GET_BY_ID "?access_token=%s&audios=%d_%d"
+#define VK_AUDIO_SEARCH                 VK_API_METHOD_AUDIO_SEARCH "?access_token=%s&count=%d&offset=%d&q=%s"
+#define VK_AUDIO_GET_RECOMMENDATIONS    VK_API_METHOD_AUDIO_GET_RECOMMENDATIONS "?access_token=%s&count=%d&offset=%d"
+#define VK_UTILS_RESOLVE_SCREEN_NAME    VK_API_METHOD_UTILS_RESOLVE_SCREEN_NAME "?access_token=%s&screen_name=%s"
+
+// Max length for VFS URL to VK track
+#define VK_VFS_URL_LEN  30
+
+#define vk_send_audio_request_and_parse_response_va(query, url_format, ...) { \
+        gchar formatted_url[MAX_URL_LEN]; \
+        sprintf (formatted_url, url_format, __VA_ARGS__); \
+        vk_send_audio_request_and_parse_response (query, formatted_url); \
+    }
+
+
+static DB_functions_t *deadbeef;
+/** Used by ui.c to detect design mode */
 ddb_gtkui_t *gtkui_plugin;
-DB_vfs_t *vfs_curl_plugin;
-
-VkAuthData *vk_auth_data = NULL;
-
+static VkAuthData *vk_auth_data = NULL;
 static intptr_t http_tid;    // thread for communication
 
 typedef struct {
     const gchar *query;
     glong id; // user or group id
-    GtkTreeModel *store;
+    GtkListStore *store;
 } SearchQuery;
-
-#define VK_AUTH_APP_ID "3035566"
-#define VK_AUTH_REDIR_URL "http://scorpp.github.io/db-vk/vk-id.html"
-#define VK_AUTH_URL "http://oauth.vkontakte.ru/authorize?client_id=" VK_AUTH_APP_ID \
-        "&scope=audio,friends,groups,offline&redirect_uri=" VK_AUTH_REDIR_URL \
-        "&response_type=token"
-
-// URL formatting strings
-#define MAX_URL_LEN         300
-#define VK_AUDIO_GET        VK_API_METHOD_AUDIO_GET "?access_token=%s"
-#define VK_AUDIO_GET_BY     VK_API_METHOD_AUDIO_GET "?access_token=%s&owner_id=%ld"
-#define VK_AUDIO_GET_BY_ID  VK_API_METHOD_AUDIO_GET_BY_ID "?access_token=%s&audios=%d_%d"
-#define VK_AUDIO_SEARCH     VK_API_METHOD_AUDIO_SEARCH "?access_token=%s&count=%d&offset=%d&q=%s"
-#define VK_AUDIO_GET_RECOMMENDATIONS     VK_API_METHOD_AUDIO_GET_RECOMMENDATIONS "?access_token=%s&count=%d&offset=%d"
-#define VK_UTILS_RESOLVE_SCREEN_NAME     VK_API_METHOD_UTILS_RESOLVE_SCREEN_NAME "?access_token=%s&screen_name=%s"
-
-// deadbeef config keys
-#define CONF_VK_AUTH_URL "vk.auth.url"
-#define CONF_VK_AUTH_DATA "vk.auth.data"
-
-// Max length for VFS URL to VK track
-#define VK_VFS_URL_LEN  30
 
 
 static int
@@ -99,7 +90,7 @@ vk_tree_model_has_track (GtkTreeModel *treemodel, VkAudioTrack *track) {
         model_title_casefolded = g_utf8_casefold (model_title, -1);
 
         if (0 == g_utf8_collate (model_artist_casefolded, track_artist_casefolded)
-                && 0 == g_utf8_collate (model_title_casefolded, track_title_casefolded)) {
+            && 0 == g_utf8_collate (model_title_casefolded, track_title_casefolded)) {
             has_track = TRUE;
             trace ("Duplicate %s - %s, duration existing %d vs %d\n", track->artist, track->title,
                    model_duration, track->duration);
@@ -127,7 +118,7 @@ static gboolean
 vk_search_filter_matches (const gchar *search_query, VkAudioTrack *track) {
     // 'My music' doesn't use search query, don't filter it
     if (!vk_search_opts.search_whole_phrase
-            || search_query == NULL) {
+        || search_query == NULL) {
         return TRUE;
     }
 
@@ -143,15 +134,15 @@ vk_search_filter_matches (const gchar *search_query, VkAudioTrack *track) {
     g_free (query_casefolded);
 
     switch (vk_search_opts.search_target) {
-    case VK_TARGET_ANY_FIELD:
-        return artist_matches || title_matches;
-    case VK_TARGET_ARTIST_FIELD:
-        return artist_matches;
-    case VK_TARGET_TITLE_FIELD:
-        return title_matches;
-    default:
+        case VK_TARGET_ANY_FIELD:
+            return artist_matches || title_matches;
+        case VK_TARGET_ARTIST_FIELD:
+            return artist_matches;
+        case VK_TARGET_TITLE_FIELD:
+            return title_matches;
+        default:
         trace ("WARN: unexpected VkSearchTraget value: %d\n", vk_search_opts.search_target);
-        return TRUE;
+            return TRUE;
     }
 }
 
@@ -160,7 +151,7 @@ parse_audio_track_callback(VkAudioTrack *track, size_t index, SearchQuery *query
     GtkTreeIter iter;
 
     if (vk_search_filter_matches (query->query, track)
-            && !vk_tree_model_has_track (query->store, track)) {
+        && !vk_tree_model_has_track (GTK_TREE_MODEL (query->store), track)) {
 
         char duration_formatted[10];
         sprintf (duration_formatted, "%d:%02d", track->duration / 60, track->duration % 60);
@@ -252,7 +243,7 @@ vk_add_tracks_from_tree_model_to_playlist (GtkTreeModel *treemodel, GList *gtk_t
 }
 
 static void
-vk_send_audio_request_and_parse_response (const gchar *url, SearchQuery *query) {
+vk_send_audio_request_and_parse_response (SearchQuery *query, const gchar *url) {
     GError *error;
     gchar *resp_str;
 
@@ -277,17 +268,13 @@ vk_search_audio_thread_func (SearchQuery *query) {
     char *escaped_search_str = curl_easy_escape (curl, query->query, 0);
 
     do {
-        char method_url[MAX_URL_LEN];
-
-        rows_added = gtk_tree_model_iter_n_children (query->store, NULL);
-        sprintf (method_url,
-                 VK_AUDIO_SEARCH,
+        rows_added = gtk_tree_model_iter_n_children (GTK_TREE_MODEL (query->store), NULL);
+        vk_send_audio_request_and_parse_response_va (query, VK_AUDIO_SEARCH,
                  vk_auth_data->access_token,
                  VK_AUDIO_MAX_TRACKS,
                  VK_AUDIO_MAX_TRACKS * iteration,
                  escaped_search_str);
-        vk_send_audio_request_and_parse_response (method_url, query);
-        rows_added = gtk_tree_model_iter_n_children (query->store, NULL) - rows_added;
+        rows_added = gtk_tree_model_iter_n_children (GTK_TREE_MODEL (query->store), NULL) - rows_added;
     } while (++iteration < 10 && rows_added > 0);
 
     trace ("INFO: Did %d iterations and stopped discovering new tracks\n", iteration);
@@ -302,13 +289,11 @@ vk_search_audio_thread_func (SearchQuery *query) {
 static void
 vk_get_my_music_thread_func (void *ctx) {
     SearchQuery query;
-    char method_url[MAX_URL_LEN];
 
     query.query = NULL,
-    query.store = GTK_TREE_MODEL (ctx);
+            query.store = GTK_LIST_STORE (ctx);
 
-    sprintf (method_url, VK_AUDIO_GET, vk_auth_data->access_token);
-    vk_send_audio_request_and_parse_response (method_url, &query);
+    vk_send_audio_request_and_parse_response_va (&query, VK_AUDIO_GET, vk_auth_data->access_token);
 
     http_tid = 0;
 }
@@ -319,51 +304,28 @@ vk_get_recommended_music_thread_func(void *ctx) {
     gint rows_added;
     gint iteration = 0;
     query.query = NULL,
-    query.store = GTK_TREE_MODEL (ctx);
+            query.store = GTK_LIST_STORE (ctx);
     do {
-        char method_url[MAX_URL_LEN];
-
-        rows_added = gtk_tree_model_iter_n_children (query.store, NULL);
-        sprintf (method_url,
-                 VK_AUDIO_GET_RECOMMENDATIONS,
+        rows_added = gtk_tree_model_iter_n_children (GTK_TREE_MODEL (query.store), NULL);
+        vk_send_audio_request_and_parse_response_va (&query, VK_AUDIO_GET_RECOMMENDATIONS,
                  vk_auth_data->access_token,
                  VK_AUDIO_MAX_TRACKS,
                  VK_AUDIO_MAX_TRACKS * iteration);
-        vk_send_audio_request_and_parse_response (method_url, &query);
-        rows_added = gtk_tree_model_iter_n_children (query.store, NULL) - rows_added;
+        rows_added = gtk_tree_model_iter_n_children (GTK_TREE_MODEL (query.store), NULL) - rows_added;
     } while (++iteration < 10 && rows_added > 0);
     http_tid = 0;
 }
 
 static void
-vk_get_by_music_thread_func (SearchQuery *query) {
+vk_get_by_owner_music_thread_func (SearchQuery *query) {
     CURL *curl;
-    char method_url[MAX_URL_LEN];
     curl = curl_easy_init ();
 
-    sprintf (method_url, VK_AUDIO_GET_BY, vk_auth_data->access_token, query->id);
-    vk_send_audio_request_and_parse_response (method_url, query);
+    vk_send_audio_request_and_parse_response_va (query, VK_AUDIO_GET_BY_OWNER, vk_auth_data->access_token, query->id);
 
     curl_easy_cleanup (curl);
     g_free (query);
     http_tid = 0;
-}
-
-void
-vk_ddb_set_config_var (const char *key, GValue *value) {
-    if (G_VALUE_HOLDS_INT (value)) {
-        deadbeef->conf_set_int (key, g_value_get_int (value));
-    } else if (G_VALUE_HOLDS_INT64 (value)) {
-        deadbeef->conf_set_int64 (key, g_value_get_int64 (value));
-    } else if (G_VALUE_HOLDS_FLOAT (value)) {
-        deadbeef->conf_set_float (key, g_value_get_float (value));
-    } else if (G_VALUE_HOLDS_STRING (value)) {
-        deadbeef->conf_set_str (key, g_value_get_string (value));
-    } else if (G_VALUE_HOLDS_BOOLEAN (value)) {
-        deadbeef->conf_set_int (key, g_value_get_boolean (value) ? 1 : 0);
-    } else {
-        trace ("WARN unsupported GType to vk_ddb_set_config_var: %s\n", G_VALUE_TYPE_NAME (value));
-    }
 }
 
 /**
@@ -426,16 +388,21 @@ vk_detect_search_target(const gchar *search_text, SearchQuery *query) {
     }
 }
 
-void
-vk_search_music (const gchar *query_text, GtkTreeModel *liststore) {
-    SearchQuery *query;
-
+static void
+vk_kill_http_thread () {
     if (http_tid) {
         trace("Killing http thread\n");
         deadbeef->thread_detach (http_tid);
 
         http_tid = 0;
     }
+}
+
+void
+vk_search_music (const gchar *query_text, GtkListStore *liststore) {
+    SearchQuery *query;
+
+    vk_kill_http_thread ();
     trace("== Searching for %s\n", query_text);
 
     query = g_malloc (sizeof(SearchQuery));
@@ -444,74 +411,26 @@ vk_search_music (const gchar *query_text, GtkTreeModel *liststore) {
     vk_detect_search_target (query_text, query);
 
     if (query->query == NULL) {
-        http_tid = deadbeef->thread_start ((DB_thread_func_t) vk_get_by_music_thread_func, query);
+        http_tid = deadbeef->thread_start ((DB_thread_func_t) vk_get_by_owner_music_thread_func, query);
     } else {
         http_tid = deadbeef->thread_start ((DB_thread_func_t) vk_search_audio_thread_func, query);
     }
 }
 
 void
-vk_get_my_music (GtkTreeModel *liststore) {
-    if (http_tid) {
-        trace("Killing http thread\n");
-        deadbeef->thread_detach (http_tid);
-
-        http_tid = 0;
-    }
+vk_get_my_music (GtkListStore *liststore) {
+    vk_kill_http_thread ();
     trace("== Getting my music, uid=%ld\n", vk_auth_data->user_id);
 
     http_tid = deadbeef->thread_start (vk_get_my_music_thread_func, liststore);
 }
 
 void
-vk_get_recommended_music (GtkTreeModel *liststore) {
-    if (http_tid) {
-        trace("Killing http thread\n");
-        deadbeef->thread_detach (http_tid);
-
-        http_tid = 0;
-    }
+vk_get_recommended_music (GtkListStore *liststore) {
+    vk_kill_http_thread ();
     trace("== Getting my music, uid=%ld\n", vk_auth_data->user_id);
 
     http_tid = deadbeef->thread_start (vk_get_recommended_music_thread_func, liststore);
-}
-
-static ddb_gtkui_widget_t *
-w_vkbrowser_create (void) {
-    if (vk_auth_data == NULL) {
-        // not authenticated, show warning and that's it
-        // TODO
-    }
-
-    ddb_gtkui_widget_t *w = malloc (sizeof (ddb_gtkui_widget_t));
-    memset (w, 0, sizeof (ddb_gtkui_widget_t));
-    vk_setup_browser_widget (w);
-    return w;
-}
-
-static gboolean
-vk_action_gtk (void *data) {
-    if (vk_auth_data == NULL) {
-        // not authenticated, show warning and that's it
-        trace ("VK - not authenticated\n")
-        gdk_threads_enter ();
-        show_message (GTK_MESSAGE_WARNING,
-                      "To be able to use VKontakte plugin you need to provide your\n"
-                      "authentication details. Please visit plugin configuration.\n"
-                      "Then you will be able to add tracks from VK.com");
-        gdk_threads_leave ();
-        return FALSE;
-    }
-
-    gtk_widget_show (vk_create_browser_dialogue ());
-    trace("Widget shown\n");
-    return FALSE;
-}
-
-static const char *scheme_names[] = { "vk://", NULL };
-static const char **
-vk_ddb_vfs_get_schemes () {
-    return scheme_names;
 }
 
 static void
@@ -523,8 +442,8 @@ vk_vfs_store_track (VkAudioTrack *track, int index, DB_FILE **f) {
     }
 }
 
-static DB_FILE *
-vk_ddb_vfs_open (const char *fname) {
+DB_FILE *
+vk_vfs_open (const gchar* fname) {
     int owner;
     int aid;
     GError *error;
@@ -558,18 +477,38 @@ vk_ddb_vfs_open (const char *fname) {
     return f;
 }
 
-static int
-vk_ddb_vfs_is_streaming (void) {
-    return 1;
+gboolean
+vk_action_gtk (void *data) {
+    if (vk_auth_data == NULL) {
+        // not authenticated, show warning and that's it
+        trace ("VK - not authenticated\n")
+        gdk_threads_enter ();
+        show_message (GTK_MESSAGE_WARNING,
+                      "To be able to use VKontakte plugin you need to provide your\n"
+                              "authentication details. Please visit plugin configuration.\n"
+                              "Then you will be able to add tracks from VK.com");
+        gdk_threads_leave ();
+        return FALSE;
+    }
+
+    gtk_widget_show (vk_create_browser_dialogue ());
+    return FALSE;
 }
 
-static int
-vk_action_callback (DB_plugin_action_t *action, int ctx) {
-    g_idle_add (vk_action_gtk, NULL);
-    return 0;
+ddb_gtkui_widget_t *
+w_vkbrowser_create () {
+    if (vk_auth_data == NULL) {
+        // not authenticated, show warning and that's it
+        // TODO
+    }
+
+    ddb_gtkui_widget_t *w = malloc (sizeof (ddb_gtkui_widget_t));
+    memset (w, 0, sizeof (ddb_gtkui_widget_t));
+    vk_setup_browser_widget (w);
+    return w;
 }
 
-static void
+void
 vk_config_changed () {
     // restore auth url if it was occasionally changed
     deadbeef->conf_set_str (CONF_VK_AUTH_URL, VK_AUTH_URL);
@@ -587,111 +526,35 @@ vk_config_changed () {
     g_free ((gpointer) auth_data_str);
 }
 
-static int
-vk_ddb_connect () {
-    vfs_curl_plugin = (DB_vfs_t *) deadbeef->plug_get_for_id ("vfs_curl");
-    if (!vfs_curl_plugin) {
-        trace ("cURL VFS plugin required\n");
-        return -1;
+void
+vk_set_config_var (const char *key, GValue *value) {
+    if (G_VALUE_HOLDS_INT (value)) {
+        deadbeef->conf_set_int (key, g_value_get_int (value));
+    } else if (G_VALUE_HOLDS_INT64 (value)) {
+        deadbeef->conf_set_int64 (key, (int64_t) g_value_get_int64 (value));
+    } else if (G_VALUE_HOLDS_FLOAT (value)) {
+        deadbeef->conf_set_float (key, g_value_get_float (value));
+    } else if (G_VALUE_HOLDS_STRING (value)) {
+        deadbeef->conf_set_str (key, g_value_get_string (value));
+    } else if (G_VALUE_HOLDS_BOOLEAN (value)) {
+        deadbeef->conf_set_int (key, g_value_get_boolean (value) ? 1 : 0);
+    } else {
+        trace ("WARN unsupported GType to vk_set_config_var: %s\n", G_VALUE_TYPE_NAME (value));
     }
-
-    gtkui_plugin = (ddb_gtkui_t *) deadbeef->plug_get_for_id (DDB_GTKUI_PLUGIN_ID);
-
-    if (gtkui_plugin && gtkui_plugin->gui.plugin.version_major == 2) {  // gtkui version 2
-        // set default UI options
-        vk_search_opts.filter_duplicates = (1 == deadbeef->conf_get_int (CONF_VK_UI_DEDUP, 1));
-        vk_search_opts.search_whole_phrase = (1 == deadbeef->conf_get_int (CONF_VK_UI_WHOLE_PHRASE, 1));
-        vk_search_opts.search_target = (VkSearchTarget) deadbeef->conf_get_int (CONF_VK_UI_TARGET, VK_TARGET_ANY_FIELD);
-
-
-        gtkui_plugin->w_reg_widget ("VK Browser", DDB_WF_SINGLE_INSTANCE, w_vkbrowser_create, "vkbrowser", NULL);
-
-        vk_config_changed ();   // refresh config at start
-        return 0;
-    }
-
-    return -1;
 }
 
-static DB_plugin_action_t vk_action = {
-    .title = "File/Add tracks from VK",
-    .name = "vk_add_tracks",
-    .flags = DB_ACTION_COMMON | DB_ACTION_ADD_MENU,
-    .callback2 = (DB_plugin_action_callback2_t) vk_action_callback,
-    .next = NULL,
-};
-
-static DB_plugin_action_t *
-vk_ddb_getactions (DB_playItem_t *it) {
-    return &vk_action;
+void
+vk_initialise (DB_functions_t *deadbeef_instance, ddb_gtkui_t *gtkui_instance) {
+    deadbeef = deadbeef_instance;
+    gtkui_plugin = gtkui_instance;
+    // set default UI options
+    vk_search_opts.filter_duplicates = (1 == deadbeef->conf_get_int (CONF_VK_UI_DEDUP, 1));
+    vk_search_opts.search_whole_phrase = (1 == deadbeef->conf_get_int (CONF_VK_UI_WHOLE_PHRASE, 1));
+    vk_search_opts.search_target = (VkSearchTarget) deadbeef->conf_get_int (CONF_VK_UI_TARGET, VK_TARGET_ANY_FIELD);
 }
 
-/**
- * DeadBeef messages handler.
- *
- * @param id message id.
- * @param ctx ?
- * @param p1 ?
- * @param p2 ?
- * @return ?
- */
-static int
-vk_ddb_message (uint32_t id, uintptr_t ctx, uint32_t p1, uint32_t p2) {
-    switch (id) {
-    case DB_EV_CONFIGCHANGED:
-        vk_config_changed();
-        break;
-    }
-    return 0;
-}
-
-static int
-vk_ddb_disconnect () {
-    vk_auth_data_free(vk_auth_data);
-    if (gtkui_plugin) {
-        gtkui_plugin->w_unreg_widget ("vkbrowser");
-    }
-    return 0;
-}
-
-static const char vk_ddb_config_dlg[] =
-    "property \"Navigate to the URL in text box\n(don't change the URL here)\" entry " CONF_VK_AUTH_URL " " VK_AUTH_URL ";\n"
-    "property \"Paste data from the page here\" entry " CONF_VK_AUTH_DATA " \"\";\n";
-
-DB_vfs_t plugin = {
-    DDB_REQUIRE_API_VERSION(1, 5)
-    .plugin.type = DB_PLUGIN_VFS,
-    .plugin.version_major = 0,
-    .plugin.version_minor = 2,
-#if GTK_CHECK_VERSION(3,0,0)
-    .plugin.id          = "vkontakte_3",
-#else
-    .plugin.id          = "vkontakte_2",
-#endif
-    .plugin.name        = "VKontakte",
-    .plugin.descr       = "Play music from VKontakte social network site.\n",
-    .plugin.copyright   = "Kirill Malyshev",
-    .plugin.website     = "http://scorpp.github.io/db-vk/",
-    // callbacks
-    .plugin.configdialog    = vk_ddb_config_dlg,
-    .plugin.connect         = vk_ddb_connect,
-    .plugin.disconnect      = vk_ddb_disconnect,
-    .plugin.message         = vk_ddb_message,
-    .plugin.get_actions     = vk_ddb_getactions,
-    // overriding minimum methods of a VFS plugin since cfs_curl will do all
-    // the work for us. files open with vkontakte plugin will actually look
-    // as those opened by vfs_curl.
-    .get_schemes    = vk_ddb_vfs_get_schemes,
-    .is_streaming   = vk_ddb_vfs_is_streaming,
-    .open           = vk_ddb_vfs_open
-};
-
-DB_plugin_t *
-#if GTK_CHECK_VERSION(3,0,0)
-vkontakte_gtk3_load (DB_functions_t *api) {
-#else
-vkontakte_gtk2_load (DB_functions_t *api) {
-#endif
-    deadbeef = api;
-    return DB_PLUGIN (&plugin);
+void
+vk_perform_cleanup () {
+    vk_kill_http_thread ();
+    vk_auth_data_free (vk_auth_data);
 }

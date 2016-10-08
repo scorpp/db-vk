@@ -9,6 +9,8 @@
 #define UI_H_
 
 #include <glib.h>
+#include <deadbeef/deadbeef.h>
+#include <deadbeef/gtkui_api.h>
 
 G_BEGIN_DECLS
 
