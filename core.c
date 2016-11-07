@@ -517,7 +517,9 @@ vk_config_changed () {
     deadbeef->conf_lock ();
     const gchar *auth_data_str = deadbeef->conf_get_str_fast (CONF_VK_AUTH_DATA, NULL);
     // old version of authentication page used single quotes instead of double. so silly!
-    auth_data_str = repl_str (auth_data_str, "'", "\"");
+    if (auth_data_str != NULL) {
+        auth_data_str = repl_str (auth_data_str, "'", "\"");
+    }
     deadbeef->conf_unlock ();
 
     vk_auth_data_free (vk_auth_data);
