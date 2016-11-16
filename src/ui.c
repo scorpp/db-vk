@@ -351,8 +351,6 @@ vk_create_browser_widget_content () {
     g_signal_connect (recommendations_button, "clicked", G_CALLBACK (on_suggested_music), list_store);
     gtk_box_pack_start (GTK_BOX (bottom_hbox), recommendations_button, FALSE, FALSE, 0);
 
-    search_target = gtk_combo_box_text_new ();
-
     filter_duplicates = gtk_check_button_new_with_label ("Filter duplicates");
     gtk_widget_set_tooltip_text (filter_duplicates, "When checked removes duplicates during next search");
     gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (filter_duplicates), vk_search_opts.filter_duplicates);
