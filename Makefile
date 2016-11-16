@@ -12,7 +12,7 @@ CURL_CFLAGS?=`pkg-config --cflags libcurl`
 CURL_LIBS?=`pkg-config --libs libcurl`
 CFLAGS+=-Wall -fPIC -D_GNU_SOURCE -g -O0 -std=c99 $(JANSSON_CFLAGS) $(CURL_CFLAGS)
 LDFLAGS+=-shared $(JANSSON_LIBS) $(CURL_LIBS) -lssl
-SOURCES=$(wildcard *.c)
+SOURCES=$(wildcard src/*.c)
 
 OBJECTS_GTK2=$(SOURCES:.c=_gtk2.o)
 OBJECTS_GTK3=$(SOURCES:.c=_gtk3.o)

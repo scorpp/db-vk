@@ -17,7 +17,7 @@ include_directories(${DB_VK_SOURCE_DIR})
 
 set(CMAKE_C_FLAGS "-g -Wall")
 
-file(GLOB VK_PLUGIN_SRC "*.h" "*.c")
+file(GLOB VK_PLUGIN_SRC "src/*.h" "src/*.c")
 
 # Older versions of cmake does not support modifying INCLUDE_DIRECTORIES for a target
 # by means of SET_TARGET_PROPERTIES command
