@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <curl/curl.h>
 #include <gtk/gtk.h>
+#include <deadbeef/deadbeef.h>
 
 #include "core.h"
 #include "common-defs.h"
@@ -35,6 +36,8 @@ static DB_functions_t *deadbeef;
 /** Used by ui.c to detect design mode */
 ddb_gtkui_t *gtkui_plugin;
 static VkAuthData *vk_auth_data = NULL;
+/** When set to TRUE will replace HTTPS track URLs to plain HTTP ones. */
+static gboolean tracks_force_http = FALSE;
 static intptr_t http_tid;    // thread for communication
 
 typedef struct {
@@ -433,12 +436,24 @@ vk_get_recommended_music (GtkListStore *liststore) {
     http_tid = deadbeef->thread_start (vk_get_recommended_music_thread_func, liststore);
 }
 
+static DB_FILE *
+deadbeef_fopen (const gchar *url) {
+    trace ("vk fopen by deadbeef: %s\n", url);
+    return deadbeef->fopen (url);
+}
+
 static void
 vk_vfs_store_track (VkAudioTrack *track, int index, DB_FILE **f) {
-    trace ("vk_vfs_store_track: %s, index=%d\n", track->url, index);
     if (index == 0) {
         // TODO ensure URL is of supported scheme
-        *f = deadbeef->fopen (track->url);
+        if (tracks_force_http
+                && g_str_has_prefix (track->url, "https://")) {
+            gchar *http_url = repl_str (track->url, "https://", "http://");
+            *f = deadbeef_fopen (http_url);
+            g_free (http_url);
+        } else {
+            *f = deadbeef_fopen (track->url);
+        }
     }
 }
 
@@ -520,6 +535,8 @@ vk_config_changed () {
     if (auth_data_str != NULL) {
         auth_data_str = repl_str (auth_data_str, "'", "\"");
     }
+
+    tracks_force_http = deadbeef->conf_get_int (CONF_TRACKS_FORCE_HTTP, 0);
     deadbeef->conf_unlock ();
 
     vk_auth_data_free (vk_auth_data);

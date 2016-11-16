@@ -108,7 +108,9 @@ vk_ddb_disconnect () {
 
 static const char vk_ddb_config_dialog[] =
     "property \"Navigate to the URL in text box\n(don't change the URL here)\" entry " CONF_VK_AUTH_URL " " VK_AUTH_URL ";\n"
-    "property \"Paste data from the page here\" entry " CONF_VK_AUTH_DATA " \"\";\n";
+    "property \"Paste data from the page here\" entry " CONF_VK_AUTH_DATA " \"\";\n"
+    "property \"Automatically fallback to plain HTTP for tracks\n(VK API still over HTTPS)\" checkbox " CONF_TRACKS_FORCE_HTTP " 0;\n"
+;
 
 DB_vfs_t plugin = {
     DDB_REQUIRE_API_VERSION(1, 5)

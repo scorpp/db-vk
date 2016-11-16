@@ -17,6 +17,7 @@
 // deadbeef config keys
 #define CONF_VK_AUTH_URL "vk.auth.url"
 #define CONF_VK_AUTH_DATA "vk.auth.data"
+#define CONF_TRACKS_FORCE_HTTP "vk.tracks.force.http"
 
 
 /// Plugin lifecycle
