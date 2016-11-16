@@ -24,7 +24,7 @@ Installation
 ------------
 ### Dependencies
  * gtk+ (2 or 3 - should correspond to GTK version your Deadbeef is built with)
- * json-glib
+ * json-glib (git version requires jansson instead)
  * curl
  * cmake
  * Deadbeef dev files (`deadbeef.h` and `gtkui.h`)
