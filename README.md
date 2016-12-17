@@ -2,9 +2,13 @@ db-vk
 =====
 DeadBeef plugin for listening musing from vkontakte.com
 
+**The plugin is discontinued and doesn't work any more due to VK music API switch off https://vk.com/dev/audio_api **
+
 For those speaking only Russian
 --------
 За помощью можно обращаться в <a href="http://vk.com/club53784333" target="_blank">группу на ВК</a>
+
+**Плагин не разивается и больше не работает из-за отключения VK API для музыки https://vk.com/dev/audio_api **
 
 Features
 --------
